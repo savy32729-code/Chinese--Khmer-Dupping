@@ -3,12 +3,167 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Website</title>
+
+    <title>Chinese → Khmer Dubbing</title>
+
+    <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
 
-    <h1>Welcome to My Website</h1>
-    <p>This is my first website.</p>
+    <!-- HEADER -->
+    <header class="header">
+        <div class="logo">
+            🎬 <span>Chinese → Khmer</span>
+        </div>
 
-</body>
-</html>
+        <div class="status">
+            <span class="status-dot"></span>
+            Online
+        </div>
+    </header>
+
+
+    <!-- MAIN -->
+    <main class="container">
+
+        <!-- HERO -->
+        <section class="hero">
+            <h1>Chinese → Khmer Dubbing</h1>
+
+            <p>
+                Upload your full video, translate it into Khmer,
+                select a voice and create short videos.
+            </p>
+        </section>
+
+
+        <!-- UPLOAD -->
+        <section class="card">
+
+            <div class="card-title">
+                <span>🎥</span>
+                <div>
+                    <h2>Upload Full Video</h2>
+                    <p>Select your original video</p>
+                </div>
+            </div>
+
+            <label for="videoInput" class="upload-box">
+
+                <div class="upload-icon">⬆️</div>
+
+                <h3>Choose Full Video</h3>
+
+                <p>
+                    MP4, MOV, AVI, MKV
+                </p>
+
+                <span class="upload-button">
+                    Choose Video
+                </span>
+
+            </label>
+
+            <input
+                type="file"
+                id="videoInput"
+                accept="video/*"
+                hidden
+            >
+
+            <div id="videoInfo" class="video-info hidden"></div>
+
+        </section>
+
+
+        <!-- VIDEO SETTINGS -->
+        <section class="card">
+
+            <div class="card-title">
+                <span>⚙️</span>
+
+                <div>
+                    <h2>Video Settings</h2>
+                    <p>Configure your video processing</p>
+                </div>
+            </div>
+
+
+            <!-- SHORT VIDEO -->
+            <div class="setting">
+
+                <label>
+                    ✂️ Short Video Duration
+                </label>
+
+                <div class="duration-box">
+                    <input
+                        type="number"
+                        id="duration"
+                        value="3"
+                        min="1"
+                        max="60"
+                    >
+
+                    <span>minutes</span>
+                </div>
+
+                <small>
+                    Each short video will be up to 3 minutes.
+                </small>
+
+            </div>
+
+
+            <!-- VOICE -->
+            <div class="setting">
+
+                <label>
+                    🔊 Voice
+                </label>
+
+                <div class="voice-options">
+
+                    <button
+                        class="voice-btn active"
+                        data-voice="Auto"
+                    >
+                        <span>🤖</span>
+                        <strong>Auto</strong>
+                        <small>Automatic</small>
+                    </button>
+
+
+                    <button
+                        class="voice-btn"
+                        data-voice="Srey Mom"
+                    >
+                        <span>👩</span>
+                        <strong>Srey Mom</strong>
+                        <small>Female voice</small>
+                    </button>
+
+
+                    <button
+                        class="voice-btn"
+                        data-voice="Piseth"
+                    >
+                        <span>👨</span>
+                        <strong>Piseth</strong>
+                        <small>Male voice</small>
+                    </button>
+
+                </div>
+
+            </div>
+
+
+            <!-- TRANSLATION -->
+            <div class="translation">
+
+                <div class="translation-text">
+
+                    <span class="translation-icon">
+                        🌐
+                    </span>
