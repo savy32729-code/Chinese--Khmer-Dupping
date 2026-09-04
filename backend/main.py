@@ -68,7 +68,7 @@ async def upload_video(file: UploadFile = File(...)):
     }
 
 
-if name == "main":
+if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
 
     import uvicorn
