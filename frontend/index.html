@@ -166,4 +166,150 @@
 
                     <span class="translation-icon">
                         🌐
-                    </span>
+                    </<div>
+                        <strong>
+                            Auto Translate
+                        </strong>
+
+                        <p>
+                            Translate all languages → Khmer
+                        </p>
+                    </div>
+
+                </div>
+
+
+                <label class="switch">
+
+                    <input
+                        type="checkbox"
+                        id="translateToggle"
+                        checked
+                    >
+
+                    <span class="slider"></span>
+
+                </label>
+
+            </div>
+
+        </section>
+
+
+        <!-- START -->
+        <section class="action-card">
+
+            <button
+                id="startBtn"
+                class="start-btn"
+            >
+                <span>▶</span>
+                START
+            </button>
+
+            <p class="start-note">
+                Start video translation and rendering
+            </p>
+
+        </section>
+
+
+        <!-- PROGRESS -->
+        <section
+            id="progressCard"
+            class="card hidden"
+        >
+
+            <div class="progress-header">
+
+                <div>
+                    <h2>Rendering Video</h2>
+                    <p id="progressText">
+                        Preparing...
+                    </p>
+                </div>
+
+                <strong id="percentage">
+                    0%
+                </strong>
+
+            </div>
+
+
+            <div class="progress-bar">
+
+                <div
+                    id="progressFill"
+                    class="progress-fill"
+                ></div>
+
+            </div>
+
+
+            <div class="processing-info">
+
+                <span id="processingStatus">
+                    Preparing video...
+                </span>
+
+                <span>
+                    ⏱️ Processing
+                </span>
+
+            </div>
+
+        </section>
+
+
+        <!-- RESULTS -->
+        <section
+            id="resultsCard"
+            class="card hidden"
+        >
+
+            <div class="result-header">
+
+                <div>
+                    <h2>✅ Rendering Complete</h2>
+
+                    <p>
+                        Your short videos are ready.
+                    </p>
+                </div>
+
+                <button
+                    id="saveBtn"
+                    class="save-btn"
+                >
+                    💾 SAVE
+                </button>
+
+            </div>
+
+
+            <div id="partsList" class="parts-list"></div>
+
+        </section>
+
+
+        <!-- FOOTER -->
+        <footer>
+
+            <p>
+                © 2026 Chinese → Khmer Dubbing
+            </p>
+
+            <p>
+                Video Translation & Dubbing System
+            </p>
+
+        </footer>
+
+    </main>
+
+
+    <script src="script.js"></script>
+
+</body>
+</html>
+
