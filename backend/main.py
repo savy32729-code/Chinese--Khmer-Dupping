@@ -4,6 +4,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import JSONResponse
+from faster_whisper import WhisperModel
 
 app = FastAPI(
     title="Chinese-Khmer Dubbing API",
@@ -12,7 +13,12 @@ app = FastAPI(
 
 UPLOAD_DIR = Path("/tmp/uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-
+# Whisper model for Chinese speech-to-text
+model = WhisperModel(
+    "base",
+    device="cpu",
+    compute_type="int8"
+)
 
 @app.get("/")
 def home():
@@ -30,7 +36,49 @@ def health():
 @app.post("/upload")
 @app.post("/upload")
 async def upload_video(file: UploadFile = File(...)):
+@app.post("/transcribe")
+async def transcribe_video(filename: str):
+    video_file = UPLOAD_DIR / Path(filename).name
 
+    if not video_file.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Video file not found. Please upload the video first."
+        )
+
+    try:
+        segments, info = model.transcribe(
+            str(video_file),
+            language="zh",
+            beam_size=5
+        )
+
+        transcript = []
+
+        for segment in segments:
+            transcript.append({
+                "start": round(segment.start, 2),
+                "end": round(segment.end, 2),
+                "text": segment.text.strip()
+            })
+
+        full_text = " ".join(
+            item["text"] for item in transcript
+        )
+
+        return {
+            "status": "transcribed",
+            "filename": video_file.name,
+            "language": info.language,
+            "text": full_text,
+            "segments": transcript
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Transcription failed: {str(e)}"
+        )
     if not file.filename:
         return JSONResponse(
             status_code=400,
