@@ -36,6 +36,11 @@ def health():
 @app.post("/upload")
 @app.post("/upload")
 async def upload_video(file: UploadFile = File(...)):
+    return {
+        "status": "uploaded",
+        "filename": safe_name,
+        "message": "Video uploaded successfully"
+    }
 @app.post("/transcribe")
 async def transcribe_video(filename: str):
     video_file = UPLOAD_DIR / Path(filename).name
