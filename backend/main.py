@@ -14,11 +14,7 @@ app = FastAPI(
 UPLOAD_DIR = Path("/tmp/uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 # Whisper model for Chinese speech-to-text
-model = WhisperModel(
-    "base",
-    device="cpu",
-    compute_type="int8"
-)
+
 
 @app.get("/")
 def home():
@@ -50,7 +46,12 @@ async def transcribe_video(filename: str):
             status_code=404,
             detail="Video file not found. Please upload the video first."
         )
-
+    model = WhisperModel(
+        "base",
+        device="cpu",
+        compute_type="int8"
+    )
+    
     try:
         segments, info = model.transcribe(
             str(video_file),
