@@ -30,7 +30,6 @@ def health():
 
 
 @app.post("/upload")
-@app.post("/upload")
 async def upload_video(file: UploadFile = File(...)):
     return {
         "status": "uploaded",
