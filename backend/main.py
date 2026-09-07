@@ -2,8 +2,7 @@ import os
 import shutil
 import uuid
 from pathlib import Path
-BASE_DIR = 
-Path(__file__).resolve().parent
+BASE_DIR = Path(file).resolve().parent
 AUDIO_DIR = BASE_DIR / "audio"
 
 AUDIO_DIR.mkdir(parents=True, exist_ok=True)
