@@ -159,7 +159,6 @@ async def transcribe_video(filename: str):
 
 @app.post("/translate")
 async def translate(data: TranslateRequest):
-
     if not data.text.strip():
         raise HTTPException(
             status_code=400,
@@ -167,17 +166,20 @@ async def translate(data: TranslateRequest):
         )
 
     try:
+        source = data.source if data.source else "auto"
+        target = data.target if data.target else "km"
+
         translated = GoogleTranslator(
-            source=data.source,
-            target=data.target
+            source=source,
+            target=target
         ).translate(data.text)
 
         return {
             "success": True,
             "original": data.text,
             "translation": translated,
-            "source": data.source,
-            "target": data.target
+            "source": source,
+            "target": target
         }
 
     except Exception as e:
@@ -185,8 +187,6 @@ async def translate(data: TranslateRequest):
             status_code=500,
             detail=f"Translation failed: {str(e)}"
         )
-
-
 @app.post("/tts")
 async def text_to_speech(data: TTSRequest):
 
