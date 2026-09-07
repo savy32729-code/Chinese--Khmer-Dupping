@@ -2,7 +2,11 @@ import os
 import shutil
 import uuid
 from pathlib import Path
+BASE_DIR = 
+Path(_file_).resolve().parent
+AUDIO_DIR = BASE_DIR / "audio"
 
+AUDIO_DIR.mkdir(parents=True, exist_ok=True)
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse, FileResponse
 from faster_whisper import WhisperModel
