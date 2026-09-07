@@ -1,474 +1,665 @@
-const videoInput = document.getElementById("videoInput");
+const API_URL = “https://chinese-khmer-dupping.onrender.com”;
 
-const videoInfo = document.getElementById("videoInfo");
+const videoInput = document.getElementById(“videoInput”);
+const videoInfo = document.getElementById(“videoInfo”);
+const durationInput = document.getElementById(“duration”);
+const voiceButtons = document.querySelectorAll(”.voice-btn”);
+const translateToggle = document.getElementById(“translateToggle”);
+const startBtn = document.getElementById(“startBtn”);
+const progressCard = document.getElementById(“progressCard”);
+const progressFill = document.getElementById(“progressFill”);
+const percentage = document.getElementById(“percentage”);
+const progressText = document.getElementById(“progressText”);
+const processingStatus = document.getElementById(“processingStatus”);
+const resultsCard = document.getElementById(“resultsCard”);
+const partsList = document.getElementById(“partsList”);
+const saveBtn = document.getElementById(“saveBtn”);
 
-const durationInput = document.getElementById("duration");
-
-const voiceButtons = document.querySelectorAll(".voice-btn");
-
-const translateToggle =
-    document.getElementById("translateToggle");
-
-const startBtn =
-    document.getElementById("startBtn");
-
-const progressCard =
-    document.getElementById("progressCard");
-
-const progressFill =
-    document.getElementById("progressFill");
-
-const percentage =
-    document.getElementById("percentage");
-
-const progressText =
-    document.getElementById("progressText");
-
-const processingStatus =
-    document.getElementById("processingStatus");
-
-const resultsCard =
-    document.getElementById("resultsCard");
-
-const partsList =
-    document.getElementById("partsList");
-
-const saveBtn =
-    document.getElementById("saveBtn");
-
-
-let selectedVoice = "Auto";
-
+let selectedVoice = “Auto”;
 let selectedVideo = null;
-
 let videoDuration = 0;
-
+let uploadedFilename = null;
+let transcriptionResult = null;
+let translationResult = null;
+let audioUrl = null;
 
 /* =========================================
-   VIDEO UPLOAD
+VIDEO UPLOAD / VIDEO INFORMATION
 ========================================= */
 
-videoInput.addEventListener("change", function () {
+videoInput.addEventListener(“change”, function () {
+const file = this.files[0];
 
-    const file = this.files[0];
+if (!file) {
+    return;
+}
 
-    if (!file) {
-        return;
-    }
+selectedVideo = file;
 
-    selectedVideo = file;
+const video = document.createElement("video");
 
-    const video = document.createElement("video");
+video.preload = "metadata";
 
-    video.preload = "metadata";
+video.onloadedmetadata = function () {
 
-    video.onloadedmetadata = function () {
+    window.URL.revokeObjectURL(video.src);
 
-        window.URL.revokeObjectURL(video.src);
+    videoDuration = video.duration;
 
-        videoDuration = video.duration;
+    const minutes = Math.floor(videoDuration / 60);
+    const seconds = Math.floor(videoDuration % 60);
 
-        const minutes =
-            Math.floor(videoDuration / 60);
+    videoInfo.classList.remove("hidden");
 
-        const seconds =
-            Math.floor(videoDuration % 60);
+    videoInfo.innerHTML = `
+        <strong>🎬 ${file.name}</strong>
+        <br>
+        📦 Size: ${formatFileSize(file.size)}
+        <br>
+        ⏱️ Duration: ${minutes}m ${seconds}s
+    `;
+};
 
-        videoInfo.classList.remove("hidden");
-
-        videoInfo.innerHTML = 
-            <strong>🎬 ${file.name}</strong>
-            <br>
-            📦 Size:
-            ${formatFileSize(file.size)}
-            <br>
-            ⏱️ Duration:
-            ${minutes}m ${seconds}s
-        ;
-    };
-
-    video.src = URL.createObjectURL(file);
-
+video.src = URL.createObjectURL(file);
 });
 
-
 /* =========================================
-   FILE SIZE
+FILE SIZE
 ========================================= */
 
 function formatFileSize(bytes) {
-
-    if (bytes < 1024 * 1024) {
-
-        return (
-            bytes / 1024
-        ).toFixed(1) + " KB";
-
-    }
+if (bytes < 1024 * 1024) {
 
     return (
-        bytes / (1024 * 1024)
-    ).toFixed(2) + " MB";
+        bytes / 1024
+    ).toFixed(1) + " KB";
+
 }
 
+return (
+    bytes / (1024 * 1024)
+).toFixed(2) + " MB";
+}
 
 /* =========================================
-   VOICE SELECT
+VOICE SELECT
 ========================================= */
 
 voiceButtons.forEach(button => {
+button.addEventListener("click", function () {
 
-    button.addEventListener("click", function () {
-
-        voiceButtons.forEach(btn => {
-            btn.classList.remove("active");
-        });
-
-        this.classList.add("active");
-
-        selectedVoice =
-            this.dataset.voice;
-
+    voiceButtons.forEach(btn => {
+        btn.classList.remove("active");
     });
 
-});
+    this.classList.add("active");
 
-
-/* =========================================
-   START
-========================================= */
-
-startBtn.addEventListener("click", function () {
-
-    if (!selectedVideo) {
-
-        alert(
-            "Please choose a video first."
-        );
-
-        return;
-    }
-
-
-    let duration =
-        parseInt(durationInput.value);
-
-
-    if (!duration || duration < 1) {
-
-        alert(
-            "Please enter a valid duration."
-        );
-
-        return;
-    }
-
-
-    /* Limit to 3 minutes for now */
-
-    if (duration > 3) {
-
-        duration = 3;
-
-        durationInput.value = 3;
-
-        alert(
-            "Short video duration is limited to 3 minutes."
-        );
-    }
-
-
-    startBtn.disabled = true;
-
-    progressCard.classList.remove("hidden");
-
-    resultsCard.classList.add("hidden");
-
-
-    progressFill.style.width = "0%";
-
-    percentage.textContent = "0%";
-
-
-    progressText.textContent =
-        "Preparing video...";
-
-    processingStatus.textContent =
-        "Preparing video...";
-
-
-    simulateRendering(duration);
+    selectedVoice = this.dataset.voice;
 
 });
-
+});
 
 /* =========================================
-   RENDERING SIMULATION
+START REAL PROCESSING
 ========================================= */
 
-function simulateRendering(duration) {
+startBtn.addEventListener(“click”, async function () {
+if (!selectedVideo) {
 
-    let progress = 0;
+    alert("Please choose a video first.");
 
-
-    const steps = [
-
-        {
-            percent: 10,
-            text: "Uploading video..."
-        },
-
-        {
-            percent: 25,
-            text: "Reading video..."
-        },
-   {
-            percent: 40,
-            text: "Detecting languages..."
-        },
-
-        {
-            percent: 55,
-            text: "Translating to Khmer..."
-        },
-
-        {
-            percent: 70,
-            text:
-                "Generating " +
-                selectedVoice +
-                " voice..."
-        },
-
-        {
-            percent: 82,
-            text: "Creating 3-minute parts..."
-        },
-
-        {
-            percent: 94,
-            text: "Rendering video..."
-        },
-
-        {
-            percent: 100,
-            text: "Completed!"
-        }
-
-    ];
-
-
-    let index = 0;
-
-
-    const timer = setInterval(() => {
-
-        if (index >= steps.length) {
-
-            clearInterval(timer);
-
-            finishRendering(duration);
-
-            return;
-        }
-
-
-        const step = steps[index];
-
-        progress = step.percent;
-
-
-        progressFill.style.width =
-            progress + "%";
-
-        percentage.textContent =
-            progress + "%";
-
-        progressText.textContent =
-            step.text;
-
-        processingStatus.textContent =
-            step.text;
-
-
-        index++;
-
-    }, 900);
-
+    return;
 }
 
 
-/* =========================================
-   FINISH
-========================================= */
+let duration = parseInt(durationInput.value);
 
-function finishRendering(duration) {
 
-    startBtn.disabled = false;
+if (!duration || duration < 1) {
+
+    alert("Please enter a valid duration.");
+
+    return;
+}
+
+
+if (duration > 3) {
+
+    duration = 3;
+
+    durationInput.value = 3;
+
+    alert(
+        "Short video duration is limited to 3 minutes."
+    );
+}
+
+
+startBtn.disabled = true;
+
+progressCard.classList.remove("hidden");
+
+resultsCard.classList.add("hidden");
+
+progressFill.style.width = "0%";
+
+percentage.textContent = "0%";
+
+progressText.textContent = "Connecting to backend...";
+
+processingStatus.textContent = "Connecting to backend...";
+
+
+try {
+
+    /* ================================
+       STEP 1: UPLOAD VIDEO
+    ================================= */
+
+    updateProgress(
+        10,
+        "Uploading video..."
+    );
+
+
+    const formData = new FormData();
+
+    formData.append(
+        "file",
+        selectedVideo
+    );
+
+
+    const uploadResponse = await fetch(
+        `${API_URL}/upload`,
+        {
+            method: "POST",
+            body: formData
+        }
+    );
+
+
+    if (!uploadResponse.ok) {
+
+        throw new Error(
+            "Video upload failed."
+        );
+    }
+
+
+    const uploadData =
+        await uploadResponse.json();
+
+
+    uploadedFilename =
+        uploadData.filename;
+
+
+    /* ================================
+       STEP 2: TRANSCRIBE CHINESE
+    ================================= */
+
+    updateProgress(
+        30,
+        "Converting Chinese speech to text..."
+    );
+
+
+    const transcribeResponse =
+        await fetch(
+            `${API_URL}/transcribe?filename=${encodeURIComponent(uploadedFilename)}`,
+            {
+                method: "POST"
+            }
+        );
+
+
+    if (!transcribeResponse.ok) {
+
+        throw new Error(
+            "Chinese transcription failed."
+        );
+    }
+
+
+    transcriptionResult =
+        await transcribeResponse.json();
+
+
+    /* ================================
+       STEP 3: TRANSLATE TO KHMER
+    ================================= */
+
+    if (translateToggle.checked) {
+
+        updateProgress(
+            55,
+            "Translating Chinese to Khmer..."
+        );
+
+
+        const translateResponse =
+            await fetch(
+                `${API_URL}/translate`,
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body: JSON.stringify({
+
+                        text:
+                            transcriptionResult.text,
+
+                        source: "zh",
+
+                        target: "km"
+
+                    })
+                }
+            );
+
+
+        if (!translateResponse.ok) {
+
+            throw new Error(
+                "Khmer translation failed."
+            );
+        }
+
+
+        translationResult =
+            await translateResponse.json();
+
+
+        /* ================================
+           STEP 4: KHMER TEXT TO SPEECH
+        ================================= */
+
+        updateProgress(
+            75,
+            "Generating Khmer voice..."
+        );
+
+
+        const ttsResponse =
+            await fetch(
+                `${API_URL}/tts`,
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body: JSON.stringify({
+
+                        text:
+                            translationResult.translation,
+
+                        lang: "km"
+
+                    })
+                }
+            );
+
+
+        if (!ttsResponse.ok) {
+
+            throw new Error(
+                "Khmer voice generation failed."
+            );
+        }
+
+
+        const ttsData =
+            await ttsResponse.json();
+
+
+        audioUrl =
+            `${API_URL}${ttsData.audio_url}`;
+
+    }
+
+
+    /* ================================
+       STEP 5: SHOW RESULT
+    ================================= */
+
+    updateProgress(
+        90,
+        "Preparing results..."
+    );
+
 
     createParts(duration);
+
+
+    showTranscript();
+
+
+    updateProgress(
+        100,
+        "Completed!"
+    );
+
 
     resultsCard.classList.remove(
         "hidden"
     );
 
-    progressText.textContent =
-        "Rendering completed.";
 
     processingStatus.textContent =
-        "All videos are ready.";
+        "Chinese video processed successfully.";
 
+
+} catch (error) {
+
+    console.error(error);
+
+    alert(
+        "Processing failed: " +
+        error.message
+    );
+
+    progressText.textContent =
+        "Processing failed.";
+
+    processingStatus.textContent =
+        error.message;
+
+} finally {
+
+    startBtn.disabled = false;
+
+}
+});
+
+/* =========================================
+PROGRESS
+========================================= */
+
+function updateProgress(
+value,
+text
+) {
+progressFill.style.width =
+    value + "%";
+
+percentage.textContent =
+    value + "%";
+
+progressText.textContent =
+    text;
+
+processingStatus.textContent =
+    text;
+}
+
+/* =========================================
+SHOW TRANSCRIPT
+========================================= */
+
+function showTranscript() {
+if (!transcriptionResult) {
+    return;
 }
 
 
-/* =========================================
-   CREATE VIDEO PART LIST
-========================================= */
+const transcript =
+    document.createElement("div");
 
-function createParts(durationMinutes) {
-
-    partsList.innerHTML = "";
+transcript.className =
+    "transcript-result";
 
 
-    let numberOfParts = 1;
+const originalTitle =
+    document.createElement("h3");
+
+originalTitle.textContent =
+    "🇨🇳 Chinese Transcript";
 
 
-    if (videoDuration > 0) {
+const originalText =
+    document.createElement("p");
 
-        numberOfParts =
-            Math.ceil(
-                videoDuration /
-                (durationMinutes * 60)
-            );
-
-    }
+originalText.textContent =
+    transcriptionResult.text;
 
 
-    for (
-        let i = 1;
-        i <= numberOfParts;
-        i++
-    ) {
+transcript.appendChild(
+    originalTitle
+);
 
-        const start =
-            (i - 1) *
-            durationMinutes *
-            60;
-
-        const end =
-            Math.min(
-                i *
-                durationMinutes *
-                60,
-                videoDuration
-            );
+transcript.appendChild(
+    originalText
+);
 
 
-        const part = document.createElement(
-            "div"
-        );
+if (
+    translationResult &&
+    translationResult.translation
+) {
 
-        part.className = "part";
+    const translatedTitle =
+        document.createElement("h3");
 
-
-        part.innerHTML = 
-
-            <div class="part-info">
-
-                <div class="part-icon">
-                    🎬
-                </div>
-
-                <div>
-
-                    <strong>
-                        Short Video ${i}
-                    </strong>
-
-                    <small>
-                        ${formatTime(start)}
-                        -
-                        ${formatTime(end)}
-                    </small>
-
-                </div>
-
-            </div>
-
-            <div class="part-status">
-                ✓ Ready
-            </div>
-
-        ;
+    translatedTitle.textContent =
+        "🇰🇭 Khmer Translation";
 
 
-        partsList.appendChild(part);
+    const translatedText =
+        document.createElement("p");
 
-    }
-
-}
-
-
-/* =========================================
-   FORMAT TIME
-========================================= */
-
-function formatTime(seconds) {
-
-    const mins =
-        Math.floor(seconds / 60);
-
-    const secs =
-        Math.floor(seconds % 60);
+    translatedText.textContent =
+        translationResult.translation;
 
 
-    return (
-        String(mins).padStart(2, "0")
-        +
-        ":" +
-        String(secs).padStart(2, "0")
+    transcript.appendChild(
+        translatedTitle
+    );
+
+    transcript.appendChild(
+        translatedText
     );
 
 }
 
 
+if (audioUrl) {
+
+    const audioTitle =
+        document.createElement("h3");
+
+    audioTitle.textContent =
+        "🔊 Khmer Voice";
+
+
+    const audio =
+        document.createElement("audio");
+
+    audio.controls = true;
+
+    audio.src = audioUrl;
+
+
+    transcript.appendChild(
+        audioTitle
+    );
+
+    transcript.appendChild(
+        audio
+    );
+
+}
+
+
+resultsCard.prepend(
+    transcript
+);
+}
+
 /* =========================================
-   SAVE
+CREATE VIDEO PART LIST
+========================================= */
+
+function createParts(durationMinutes) {
+partsList.innerHTML = "";
+
+let numberOfParts = 1;
+
+
+if (videoDuration > 0) {
+
+    numberOfParts =
+        Math.ceil(
+            videoDuration /
+            (durationMinutes * 60)
+        );
+
+}
+
+
+for (
+    let i = 1;
+    i <= numberOfParts;
+    i++
+) {
+
+    const start =
+        (i - 1) *
+        durationMinutes *
+        60;
+
+
+    const end =
+        Math.min(
+            i *
+            durationMinutes *
+            60,
+            videoDuration
+        );
+
+
+    const part =
+        document.createElement("div");
+
+
+    part.className =
+        "part";
+
+
+    part.innerHTML = `
+
+        <div class="part-info">
+
+            <div class="part-icon">
+                🎬
+            </div>
+
+            <div>
+
+                <strong>
+                    Short Video ${i}
+                </strong>
+
+                <small>
+                    ${formatTime(start)}
+                    -
+                    ${formatTime(end)}
+                </small>
+
+            </div>
+
+        </div>
+
+        <div class="part-status">
+            ✓ Ready
+        </div>
+
+    `;
+
+
+    partsList.appendChild(part);
+
+}
+}
+
+/* =========================================
+FORMAT TIME
+========================================= */
+
+function formatTime(seconds) {
+const mins =
+    Math.floor(seconds / 60);
+
+const secs =
+    Math.floor(seconds % 60);
+
+
+return (
+    String(mins).padStart(2, "0")
+    +
+    ":"
+    +
+    String(secs).padStart(2, "0")
+);
+}
+
+/* =========================================
+SAVE PROJECT
 ========================================= */
 
 saveBtn.addEventListener(
-    "click",
-    function () {
+“click”,
+function () {
+    const information = {
 
-        const information = {
+        website:
+            "Chinese → Khmer Dubbing",
 
-            website:
-                "Chinese → Khmer Dubbing",
+        originalVideo:
+            selectedVideo
+                ? selectedVideo.name
+                : null,
 
-            originalVideo:
-                selectedVideo
-                    ? selectedVideo.name
-                    : null,
+        voice:
+            selectedVoice,
 
-            voice:
-                selectedVoice,
+        translateTo:
+            translateToggle.checked
+                ? "Khmer"
+                : "Disabled",
 
-            translateTo:
-                translateToggle.checked
-                    ? "Khmer"
-                    : "Disabled",
+        chineseTranscript:
+            transcriptionResult
+                ? transcriptionResult.text
+                : null,
 
-            shortDuration:
-                durationInput.value +
-                " minutes",
+        khmerTranslation:
+            translationResult
+                ? translationResult.translation
+                : null,
+
+        audio:
+            audioUrl,
+
+        shortDuration:
+            durationInput.value +
+            " minutes",
+
         status:
-                "Rendering completed"
+            "Rendering completed"
 
-        };
+    };
 
 
-        const blob = new Blob(
-
+    const blob =
+        new Blob(
             [
                 JSON.stringify(
                     information,
@@ -476,33 +667,30 @@ saveBtn.addEventListener(
                     2
                 )
             ],
-
             {
                 type:
                     "application/json"
             }
-
         );
 
 
-        const url =
-            URL.createObjectURL(blob);
+    const url =
+        URL.createObjectURL(blob);
 
 
-        const a =
-            document.createElement("a");
+    const a =
+        document.createElement("a");
 
 
-        a.href = url;
+    a.href = url;
 
-        a.download =
-            "dubbing-project.json";
-
-
-        a.click();
+    a.download =
+        "dubbing-project.json";
 
 
-        URL.revokeObjectURL(url);
+    a.click();
 
-    }
-);  
+
+    URL.revokeObjectURL(url);
+
+}
