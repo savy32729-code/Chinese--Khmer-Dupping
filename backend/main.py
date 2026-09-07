@@ -10,291 +10,243 @@ from pydantic import BaseModel
 from deep_translator import GoogleTranslator
 from gtts import gTTS
 
-=========================
-
-APP
-
-=========================
 
 app = FastAPI(
-title=“Chinese-Khmer Dubbing API”,
-version=“1.0.0”
+    title="Chinese-Khmer Dubbing API",
+    version="1.0.0"
 )
 
-=========================
-
-REQUEST MODELS
-
-=========================
 
 class TranslateRequest(BaseModel):
-text: str
-source: str = “auto”
-target: str = “km”
+    text: str
+    source: str = "auto"
+    target: str = "km"
+
 
 class TTSRequest(BaseModel):
-text: str
-lang: str = “km”
+    text: str
+    lang: str = "km"
 
-=========================
 
-DIRECTORIES
-
-=========================
-
-UPLOAD_DIR = Path(”/tmp/uploads”)
+UPLOAD_DIR = Path("/tmp/uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
-AUDIO_DIR = Path(“uploads”)
+AUDIO_DIR = Path("uploads")
 AUDIO_DIR.mkdir(parents=True, exist_ok=True)
 
-=========================
-
-WHISPER MODEL
-
-=========================
 
 model = WhisperModel(
-“base”,
-device=“cpu”,
-compute_type=“int8”
+    "base",
+    device="cpu",
+    compute_type="int8"
 )
 
-=========================
 
-HOME
-
-=========================
-
-@app.get(”/”)
+@app.get("/")
 def home():
-return {
-“status”: “ok”,
-“message”: “Chinese-Khmer Dubbing API is running”
-}
+    return {
+        "status": "ok",
+        "message": "Chinese-Khmer Dubbing API is running"
+    }
 
-=========================
 
-HEALTH CHECK
-
-=========================
-
-@app.get(”/health”)
+@app.get("/health")
 def health():
-return {
-“status”: “healthy”
-}
-
-=========================
-
-UPLOAD VIDEO
-
-=========================
-
-@app.post(”/upload”)
-async def upload_video(file: UploadFile = File(…)):
- if not file.filename:
-    return JSONResponse(
-        status_code=400,
-        content={
-            "error": "No file selected"
-        }
-    )
-
-allowed = {
-    ".mp4",
-    ".mov",
-    ".mkv",
-    ".avi",
-    ".webm"
-}
-
-extension = Path(file.filename).suffix.lower()
-
-if extension not in allowed:
-    return JSONResponse(
-        status_code=400,
-        content={
-            "error": "Unsupported video format",
-            "allowed": list(allowed)
-        }
-    )
-
-safe_name = Path(file.filename).name
-output_file = UPLOAD_DIR / safe_name
-
-try:
-    with output_file.open("wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
     return {
-        "status": "uploaded",
-        "filename": safe_name,
-        "message": "Video uploaded successfully",
-        "next_step": "Use /transcribe to convert Chinese speech to text"
+        "status": "healthy"
     }
 
-except Exception as e:
-    raise HTTPException(
-        status_code=500,
-        detail=f"Upload failed: {str(e)}"
-    )
-=========================
 
-TRANSCRIBE CHINESE VIDEO
+@app.post("/upload")
+async def upload_video(file: UploadFile = File(...)):
 
-=========================
+    if not file.filename:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "No file selected"
+            }
+        )
 
-@app.post(”/transcribe”)
+    allowed = {
+        ".mp4",
+        ".mov",
+        ".mkv",
+        ".avi",
+        ".webm"
+    }
+
+    extension = Path(file.filename).suffix.lower()
+
+    if extension not in allowed:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "Unsupported video format",
+                "allowed": list(allowed)
+            }
+        )
+
+    safe_name = Path(file.filename).name
+    output_file = UPLOAD_DIR / safe_name
+
+    try:
+        with output_file.open("wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        return {
+            "status": "uploaded",
+            "filename": safe_name,
+            "message": "Video uploaded successfully"
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Upload failed: {str(e)}"
+        )
+
+
+@app.post("/transcribe")
 async def transcribe_video(filename: str):
-video_file = UPLOAD_DIR / Path(filename).name
 
-if not video_file.exists():
-    raise HTTPException(
-        status_code=404,
-        detail="Video file not found. Please upload the video first."
-    )
+    video_file = UPLOAD_DIR / Path(filename).name
 
-try:
-    segments, info = model.transcribe(
-        str(video_file),
-        language="zh",
-        beam_size=5
-    )
+    if not video_file.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Video file not found"
+        )
 
-    transcript = []
+    try:
+        segments, info = model.transcribe(
+            str(video_file),
+            language="zh",
+            beam_size=5
+        )
 
-    for segment in segments:
-        transcript.append({
-            "start": round(segment.start, 2),
-            "end": round(segment.end, 2),
-            "text": segment.text.strip()
-        })
+        transcript = []
 
-    full_text = " ".join(
-        item["text"]
-        for item in transcript
-    )
+        for segment in segments:
+            transcript.append({
+                "start": round(segment.start, 2),
+                "end": round(segment.end, 2),
+                "text": segment.text.strip()
+            })
 
-    return {
-        "status": "transcribed",
-        "filename": video_file.name,
-        "language": info.language,
-        "text": full_text,
-        "segments": transcript
-    }
+        full_text = " ".join(
+            item["text"]
+            for item in transcript
+        )
 
-except Exception as e:
-    raise HTTPException(
-        status_code=500,
-        detail=f"Transcription failed: {str(e)}"
-    )
-=========================
+        return {
+            "status": "transcribed",
+            "filename": video_file.name,
+            "language": info.language,
+            "text": full_text,
+            "segments": transcript
+        }
 
-TRANSLATE CHINESE → KHMER
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Transcription failed: {str(e)}"
+        )
 
-=========================
 
-@app.post(”/translate”)
+@app.post("/translate")
 async def translate(data: TranslateRequest):
-if not data.text.strip():
-    raise HTTPException(
-        status_code=400,
-        detail="Text cannot be empty"
-    )
 
-try:
-    translated = GoogleTranslator(
-        source=data.source,
-        target=data.target
-    ).translate(data.text)
+    if not data.text.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Text cannot be empty"
+        )
 
-    return {
-        "success": True,
-        "original": data.text,
-        "translation": translated,
-        "source": data.source,
-        "target": data.target
-    }
+    try:
+        translated = GoogleTranslator(
+            source=data.source,
+            target=data.target
+        ).translate(data.text)
 
-except Exception as e:
-    raise HTTPException(
-        status_code=500,
-        detail=f"Translation failed: {str(e)}"
-    )
-=========================
+        return {
+            "success": True,
+            "original": data.text,
+            "translation": translated,
+            "source": data.source,
+            "target": data.target
+        }
 
-TEXT TO SPEECH
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Translation failed: {str(e)}"
+        )
 
-=========================
 
-@app.post(”/tts”)
+@app.post("/tts")
 async def text_to_speech(data: TTSRequest):
-if not data.text.strip():
-    raise HTTPException(
-        status_code=400,
-        detail="Text cannot be empty"
-    )
 
-try:
-    filename = f"{uuid.uuid4()}.mp3"
-    filepath = AUDIO_DIR / filename
+    if not data.text.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Text cannot be empty"
+        )
 
-    tts = gTTS(
-        text=data.text,
-        lang=data.lang
-    )
+    try:
+        filename = f"{uuid.uuid4()}.mp3"
+        filepath = AUDIO_DIR / filename
 
-    tts.save(str(filepath))
+        tts = gTTS(
+            text=data.text,
+            lang=data.lang
+        )
 
-    return {
-        "success": True,
-        "filename": filename,
-        "audio_url": f"/audio/{filename}"
-    }
+        tts.save(str(filepath))
 
-except Exception as e:
-    raise HTTPException(
-        status_code=500,
-        detail=f"TTS failed: {str(e)}"
-    )
-=========================
+        return {
+            "success": True,
+            "filename": filename,
+            "audio_url": f"/audio/{filename}"
+        }
 
-GET AUDIO
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"TTS failed: {str(e)}"
+        )
 
-=========================
 
-@app.get(”/audio/{filename}”)
+@app.get("/audio/{filename}")
 async def get_audio(filename: str):
-filepath = AUDIO_DIR / Path(filename).name
 
-if not filepath.exists():
-    raise HTTPException(
-        status_code=404,
-        detail="Audio file not found"
+    filepath = AUDIO_DIR / Path(filename).name
+
+    if not filepath.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Audio file not found"
+        )
+
+    return FileResponse(
+        str(filepath),
+        media_type="audio/mpeg"
     )
 
-return FileResponse(
-    str(filepath),
-    media_type="audio/mpeg"
-)
-=========================
 
-RUN SERVER
+if __name__ == "__main__":
 
-=========================
-if name == “main”:
-import uvicorn
+    import uvicorn
 
-port = int(
-    os.environ.get(
-        "PORT",
-        10000
+    port = int(
+        os.environ.get(
+            "PORT",
+            10000
+        )
     )
-)
 
-uvicorn.run(
-    app,
-    host="0.0.0.0",
-    port=port
-)
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=port
+    )
