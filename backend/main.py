@@ -88,11 +88,7 @@ async def transcribe_video(filename: str):
         "filename": safe_name,
         "message": "Video uploaded successfully"
     }
-    model = WhisperModel(
-        "base",
-        device="cpu",
-        compute_type="int8"
-    )
+    
     
     try:
         segments, info = model.transcribe(
