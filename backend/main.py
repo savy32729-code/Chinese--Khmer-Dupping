@@ -122,8 +122,17 @@ async def text_to_speech(data: TTSRequest):
             "success": True,
             "audio_url": f"/audio/{filename}"
         }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
+
+
 @app.get("/audio/{filename}")
 async def get_audio(filename: str):
+
     filepath = Path("uploads") / Path(filename).name
 
     if not filepath.exists():
