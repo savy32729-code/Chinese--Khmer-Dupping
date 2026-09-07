@@ -2,7 +2,7 @@ import os
 import shutil
 from pathlib import Path
 
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
 from faster_whisper import WhisperModel
 
