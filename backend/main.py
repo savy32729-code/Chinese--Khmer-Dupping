@@ -219,21 +219,23 @@ async def text_to_speech(data: TTSRequest):
 
 @app.get("/audio/{filename}")
 async def get_audio(filename: str):
-    filepath = AUDIO_DIR / Path(filename).name
+    filename = Path(filename).name
+    filepath = AUDIO_DIR / filename
 
-    print("Looking for audio:", filepath)
+    # បើ URL មិនមាន .mp3 សូមបន្ថែម
+    if not filepath.exists() and not filename.endswith(".mp3"):
+        filepath = AUDIO_DIR / f"{filename}.mp3"
 
     if not filepath.exists():
         raise HTTPException(
             status_code=404,
-            detail=f"Audio file not found: {filepath}"
+            detail="Audio file not found"
         )
 
     return FileResponse(
         str(filepath),
         media_type="audio/mpeg"
     )
-
 
 if __name__ == "__main__":
 
