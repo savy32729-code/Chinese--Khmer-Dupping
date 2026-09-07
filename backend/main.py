@@ -3,7 +3,7 @@ import shutil
 from pathlib import Path
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse,FileResponse
 from faster_whisper import WhisperModel
 from pydantic import BaseModel
 from deep_translator import GoogleTranslator
