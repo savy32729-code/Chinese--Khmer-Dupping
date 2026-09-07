@@ -40,7 +40,49 @@ async def upload_video(file: UploadFile = File(...)):
 
     with output_file.open("wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
+@app.post("/transcribe")
+async def transcribe_video(filename: str):
+    video_file = UPLOAD_DIR / Path(filename).name
 
+    if not video_file.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Video file not found. Please upload the video first."
+        )
+
+    try:
+        segments, info = model.transcribe(
+            str(video_file),
+            language="zh",
+            beam_size=5
+        )
+
+        transcript = []
+
+        for segment in segments:
+            transcript.append({
+                "start": round(segment.start, 2),
+                "end": round(segment.end, 2),
+                "text": segment.text.strip()
+            })
+
+        full_text = " ".join(
+            item["text"] for item in transcript
+        )
+
+        return {
+            "status": "transcribed",
+            "filename": video_file.name,
+            "language": info.language,
+            "text": full_text,
+            "segments": transcript
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Transcription failed: {str(e)}"
+        )
     return {
         "status": "uploaded",
         "filename": safe_name,
