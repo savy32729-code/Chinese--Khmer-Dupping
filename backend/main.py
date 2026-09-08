@@ -476,22 +476,17 @@ async def text_to_speech(data: TTSRequest):
         )
 
     try:
+    filename = f"{uuid.uuid4()}.mp3"
+    filepath = AUDIO_DIR / filename
 
-        filename = f"{uuid.uuid4()}.mp3"
+    voice = data.voice or "km-KH-PisethNeural"
 
-        filepath = AUDIO_DIR / filename
+    communicate = edge_tts.Communicate(
+        data.text,
+        voice
+    )
 
-      voice = data.voice or "km-KH-PisethNeural"
-
-        communicate = edge_tts.Communicate(
-
-            data.text,
-
-            voice
-
-        )
-
-        await communicate.save(str(filepath))
+    await communicate.save(str(filepath))
 
         return {
 
