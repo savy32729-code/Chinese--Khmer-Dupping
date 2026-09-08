@@ -694,39 +694,29 @@ async def create_dubbing(
 
                 end = start + 1
 
-            tts_file = (
-
+                        tts_file = (
                 work_dir /
-
                 f"tts_{index}.mp3"
-
             )
 
             voice = "km-KH-PisethNeural"
 
-communicate = edge_tts.Communicate(
-    text,
-    voice
-)
-
-await communicate.save(
-    str(tts_file)
-)
-
-            audio_files.append(
-
-                {
-
-                    "file": tts_file,
-
-                    "start": start,
-
-                    "end": end,
-
-                }
-
+            communicate = edge_tts.Communicate(
+                text,
+                voice
             )
 
+            await communicate.save(
+                str(tts_file)
+            )
+
+            audio_files.append(
+                {
+                    "file": tts_file,
+                    "start": start,
+                    "end": end,
+                }
+            )
         if not audio_files:
 
             raise HTTPException(
