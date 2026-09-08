@@ -2,16 +2,16 @@ import os
 import shutil
 import uuid
 from pathlib import Path
-BASE_DIR = Path(__file__).resolve().parent
-AUDIO_DIR = BASE_DIR / "audio"
 
-AUDIO_DIR.mkdir(parents=True, exist_ok=True)
-from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.responses import JSONResponse, FileResponse
-from faster_whisper import WhisperModel
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from deep_translator import GoogleTranslator
 from gtts import gTTS
+
+app = FastAPI()
+
+AUDIO_DIR = Path("audio")
+AUDIO_DIR.mkdir(parents=True, exist_ok=True)
 
 
 app = FastAPI(
@@ -190,7 +190,7 @@ async def translate(data: TranslateRequest):
 @app.post("/tts")
 async def text_to_speech(data: TTSRequest):
 
-    if not data.text.strip():
+    if not data.text or not data.text.strip():
         raise HTTPException(
             status_code=400,
             detail="Text cannot be empty"
@@ -216,18 +216,12 @@ async def text_to_speech(data: TTSRequest):
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"TTS failed: {str(e)}"
+            detail=f"TTS generation failed: {str(e)}"
         )
-
-
 @app.get("/audio/{filename}")
 async def get_audio(filename: str):
-    filename = Path(filename).name
-    filepath = AUDIO_DIR / filename
 
-    # បើ URL មិនមាន .mp3 សូមបន្ថែម
-    if not filepath.exists() and not filename.endswith(".mp3"):
-        filepath = AUDIO_DIR / f"{filename}.mp3"
+    filepath = AUDIO_DIR / filename
 
     if not filepath.exists():
         raise HTTPException(
@@ -236,8 +230,9 @@ async def get_audio(filename: str):
         )
 
     return FileResponse(
-        str(filepath),
-        media_type="audio/mpeg"
+        path=str(filepath),
+        media_type="audio/mpeg",
+        filename=filename
     )
 
 if __name__ == "__main__":
