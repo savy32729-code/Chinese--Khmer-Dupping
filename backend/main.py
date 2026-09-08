@@ -464,53 +464,35 @@ async def translate(
 
 @app.post("/tts")
 
-async def text_to_speech(
+async def text_to_speech(data: TTSRequest):
 
-    data: TTSRequest
-
-):
-
-    text = data.text.strip()
-
-    if not text:
+    if not data.text or not data.text.strip():
 
         raise HTTPException(
 
             status_code=400,
 
-            detail="Text cannot be empty",
+            detail="Text cannot be empty"
 
         )
 
     try:
 
-        filename = (
+        filename = f"{uuid.uuid4()}.mp3"
 
-            f"{uuid.uuid4().hex}.mp3"
+        filepath = AUDIO_DIR / filename
 
-        )
+        voice = "km-KH-PisethNeural"
 
-        filepath = (
+        communicate = edge_tts.Communicate(
 
-            AUDIO_DIR /
+            data.text,
 
-            filename
-
-        )
-
-        tts = gTTS(
-
-            text=text,
-
-            lang=data.lang or "km",
+            voice
 
         )
 
-        tts.save(
-
-            str(filepath)
-
-        )
+        await communicate.save(str(filepath))
 
         return {
 
@@ -518,11 +500,21 @@ async def text_to_speech(
 
             "filename": filename,
 
-            "audio_url":
+            "voice": voice,
 
-                f"/audio/{filename}",
+            "audio_url": f"/audio/{filename}"
 
         }
+
+    except Exception as e:
+
+        raise HTTPException(
+
+            status_code=500,
+
+            detail=f"TTS generation failed: {str(e)}"
+
+        )
 
     except Exception as exc:
 
