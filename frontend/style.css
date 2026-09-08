@@ -1,678 +1,271 @@
 * {
     box-sizing: border-box;
-    margin: 0;
-    padding: 0;
 }
 
 body {
-    font-family:
-        -apple-system,
-        BlinkMacSystemFont,
-        "Segoe UI",
-        Arial,
-        sans-serif;
-
-    background: #f4f7fb;
-    color: #172033;
-
-    min-height: 100vh;
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #f5f7fb;
+    color: #222;
 }
 
-
-/* =========================================
-   App
-========================================= */
-
-.app {
+.container {
     width: 100%;
-    max-width: 720px;
-
-    margin: 0 auto;
-    padding: 24px 16px 40px;
+    max-width: 600px;
+    margin: auto;
+    padding: 20px;
 }
 
-
-/* =========================================
-   Header
-========================================= */
-
-.header {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-
-    margin-bottom: 20px;
+.hero {
+    text-align: center;
+    padding: 25px 10px;
 }
 
-.logo {
-    width: 52px;
-    height: 52px;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    background: #2563eb;
-    border-radius: 15px;
-
-    font-size: 27px;
+.hero-icon {
+    font-size: 42px;
+    margin-bottom: 10px;
 }
 
-.header h1 {
-    font-size: 24px;
-    font-weight: 800;
-
-    line-height: 1.2;
+.hero h1 {
+    margin: 0;
+    font-size: 28px;
 }
 
-.header p {
-    margin-top: 4px;
-
-    color: #64748b;
-    font-size: 14px;
+.hero p {
+    margin-top: 8px;
+    color: #666;
 }
-
-
-/* =========================================
-   Card
-========================================= */
 
 .card {
-    background: #ffffff;
-
-    border: 1px solid #e5eaf1;
-    border-radius: 20px;
-
+    background: white;
+    border-radius: 18px;
     padding: 20px;
-
-    margin-bottom: 16px;
-
-    box-shadow:
-        0 8px 30px rgba(15, 23, 42, 0.06);
-}
-
-
-/* =========================================
-   Card Title
-========================================= */
-
-.card-title {
-    display: flex;
-    align-items: center;
-
-    gap: 12px;
-
     margin-bottom: 18px;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.06);
 }
 
-.card-title > span {
-    width: 42px;
-    height: 42px;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    background: #eff6ff;
-    border-radius: 12px;
-
+.card h2 {
+    margin-top: 0;
     font-size: 20px;
 }
 
-.card-title h2 {
-    font-size: 18px;
-    font-weight: 750;
-}
-
-.card-title p {
-    color: #64748b;
-    font-size: 13px;
-
-    margin-top: 3px;
-}
-
-
-/* =========================================
-   Upload Box
-========================================= */
-
 .upload-box {
-    width: 100%;
-
-    min-height: 180px;
-
-    border: 2px dashed #bfdbfe;
-    border-radius: 16px;
-
-    background: #f8fbff;
-
-    display: flex;
-    flex-direction: column;
-
-    align-items: center;
-    justify-content: center;
-
+    display: block;
     text-align: center;
-
-    padding: 25px 15px;
-
+    padding: 30px 15px;
+    border: 2px dashed #cbd5e1;
+    border-radius: 15px;
     cursor: pointer;
-
-    transition:
-        border-color 0.2s,
-        background 0.2s,
-        transform 0.2s;
-}
-
-.upload-box:hover {
-    border-color: #2563eb;
-    background: #eff6ff;
-}
-
-.upload-box:active {
-    transform: scale(0.99);
+    background: #fafafa;
 }
 
 .upload-icon {
     font-size: 40px;
-
-    margin-bottom: 12px;
+    margin-bottom: 10px;
 }
 
 .upload-box strong {
-    font-size: 15px;
-
-    color: #1e40af;
+    display: block;
+    font-size: 16px;
 }
 
-.upload-box span {
-    margin-top: 6px;
-
-    color: #64748b;
-    font-size: 13px;
+.upload-box small {
+    display: block;
+    margin-top: 8px;
+    color: #777;
 }
-
-
-/* =========================================
-   Video Info
-========================================= */
 
 .video-info {
-    margin-top: 14px;
-
-    padding: 12px 14px;
-
+    margin-top: 15px;
+    padding: 12px;
+    background: #f1f5f9;
     border-radius: 10px;
-
-    background: #f8fafc;
-
-    color: #334155;
-
-    font-size: 14px;
-
     word-break: break-word;
 }
 
-.file-size {
-    color: #64748b;
-
-    font-size: 13px;
-
-    margin-top: 5px;
+.duration {
+    margin-top: 8px;
+    color: #666;
 }
-
-
-/* =========================================
-   Option
-========================================= */
 
 .option-row {
     display: flex;
-
     align-items: center;
     justify-content: space-between;
-
     gap: 15px;
-
-    margin-top: 18px;
-
-    padding: 14px;
-
-    background: #f8fafc;
-
-    border-radius: 14px;
 }
 
 .option-text {
     display: flex;
     align-items: center;
-
-    gap: 11px;
+    gap: 12px;
 }
 
 .option-icon {
-    width: 38px;
-    height: 38px;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    background: #ffffff;
-
-    border-radius: 10px;
-
-    font-size: 19px;
+    font-size: 25px;
 }
 
 .option-text strong {
     display: block;
-
-    font-size: 14px;
 }
 
 .option-text small {
     display: block;
-
-    margin-top: 3px;
-
-    color: #64748b;
-
-    font-size: 12px;
+    color: #777;
+    margin-top: 4px;
 }
-
-
-/* =========================================
-   Toggle
-========================================= */
 
 .switch {
     position: relative;
-
-    width: 48px;
-    height: 28px;
-
+    width: 52px;
+    height: 30px;
     flex-shrink: 0;
 }
 
 .switch input {
-    opacity: 0;
-    width: 0;
-    height: 0;
+    display: none;
 }
 
 .slider {
     position: absolute;
-
     inset: 0;
-
-    background: #cbd5e1;
-
+    background: #ccc;
     border-radius: 30px;
-
     cursor: pointer;
-
-    transition: 0.2s;
+    transition: 0.3s;
 }
 
 .slider::before {
     content: "";
-
     position: absolute;
-
-    width: 22px;
-    height: 22px;
-
+    width: 24px;
+    height: 24px;
     left: 3px;
     top: 3px;
-
     background: white;
-
     border-radius: 50%;
-
-    box-shadow:
-        0 2px 5px rgba(0, 0, 0, 0.15);
-
-    transition: 0.2s;
+    transition: 0.3s;
 }
 
 .switch input:checked + .slider {
-    background: #2563eb;
+    background: #6366f1;
 }
 
 .switch input:checked + .slider::before {
-    transform: translateX(20px);
+    transform: translateX(22px);
 }
 
-
-/* =========================================
-   Buttons
-========================================= */
-
-button {
-    font-family: inherit;
+.voice-group {
+    margin-top: 20px;
+    margin-bottom: 18px;
 }
 
-.primary-btn,
-.secondary-btn {
-    width: 100%;
-
-    min-height: 52px;
-
-    border: none;
-
-    border-radius: 14px;
-
+.voice-group label {
+    display: block;
+    margin-bottom: 8px;
     font-size: 15px;
+    font-weight: 600;
+}
 
-    font-weight: 700;
+.voice-group select {
+    width: 100%;
+    padding: 13px 14px;
+    border: 1px solid #d1d5db;
+    border-radius: 12px;
+    background: white;
+    font-size: 15px;
+    outline: none;
+}
 
-    cursor: pointer;
-
-    transition:
-        transform 0.15s,
-        opacity 0.15s;
+.voice-group select:focus {
+    border-color: #6366f1;
 }
 
 .primary-btn {
-    margin-top: 18px;
-
-    background: #2563eb;
-
-    color: #ffffff;
-
-    box-shadow:
-        0 7px 18px rgba(37, 99, 235, 0.25);
-}
-
-.primary-btn:hover {
-    background: #1d4ed8;
-}
-
-.primary-btn:active,
-.secondary-btn:active {
-    transform: scale(0.98);
+    width: 100%;
+    border: none;
+    border-radius: 12px;
+    padding: 15px;
+    background: #6366f1;
+    color: white;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
 }
 
 .primary-btn:disabled {
-    background: #94a3b8;
-
+    background: #cbd5e1;
     cursor: not-allowed;
-
-    box-shadow: none;
 }
 
-.secondary-btn {
-    margin-top: 18px;
-
-    background: #eff6ff;
-
-    color: #1d4ed8;
-}
-
-.secondary-btn:hover {
-    background: #dbeafe;
-}
-
-
-/* =========================================
-   Progress
-========================================= */
-
-.section-heading {
-    display: flex;
-
-    align-items: flex-start;
-    justify-content: space-between;
-
-    gap: 15px;
-}
-
-.section-heading h2 {
-    font-size: 18px;
-    font-weight: 750;
-}
-
-.section-heading p {
-    color: #64748b;
-
-    font-size: 13px;
-
-    margin-top: 4px;
-}
-
-.section-heading > strong {
-    color: #2563eb;
-
-    font-size: 18px;
-}
-
-.progress-bar {
+.progress {
     width: 100%;
     height: 12px;
-
-    background: #e2e8f0;
-
+    background: #e5e7eb;
     border-radius: 20px;
-
     overflow: hidden;
-
-    margin-top: 20px;
 }
 
 .progress-fill {
+    width: 0%;
     height: 100%;
-
-    background: #2563eb;
-
-    border-radius: 20px;
-
-    transition: width 0.3s ease;
+    background: #6366f1;
+    transition: width 0.3s;
 }
 
-.progress-text {
-    margin-top: 10px;
-
-    color: #64748b;
-
-    font-size: 13px;
-
+.percentage {
     text-align: center;
-}
-
-
-/* =========================================
-   Results
-========================================= */
-
-.parts-list {
-    display: flex;
-    flex-direction: column;
-
-    gap: 12px;
-
-    margin-top: 18px;
-}
-
-.result-part {
-    display: flex;
-
-    gap: 12px;
-
-    padding: 14px;
-
-    background: #f8fafc;
-
-    border: 1px solid #e5eaf1;
-
-    border-radius: 14px;
-}
-
-.part-number {
-    width: 30px;
-    height: 30px;
-
-    flex-shrink: 0;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    background: #2563eb;
-
-    color: white;
-
-    border-radius: 9px;
-
-    font-size: 13px;
-    font-weight: 700;
-}
-
-.part-content {
-    min-width: 0;
-
-    flex: 1;
-}
-
-.original-text {
-    color: #64748b;
-
-    font-size: 13px;
-
-    line-height: 1.5;
-}
-
-.translation-text {
-    color: #172033;
-
-    font-size: 15px;
-
-    font-weight: 600;
-
-    line-height: 1.6;
-
-    margin-top: 5px;
-}
-
-.result-part audio {
-    width: 100%;
-
-    height: 38px;
-
+    font-size: 22px;
+    font-weight: bold;
     margin-top: 12px;
 }
 
-
-/* =========================================
-   Footer
-========================================= */
-
-footer {
+.progress-text {
     text-align: center;
-
-    padding: 12px 0 5px;
-
-    color: #64748b;
-
-    font-size: 12px;
+    margin-top: 8px;
 }
 
-.footer-small {
-    margin-top: 4px;
-
-    color: #94a3b8;
-
-    font-size: 11px;
+.processing-status {
+    text-align: center;
+    margin-top: 10px;
+    color: #666;
 }
 
+.save-btn {
+    display: block;
+    width: 100%;
+    text-align: center;
+    padding: 15px;
+    border-radius: 12px;
+    background: #16a34a;
+    color: white;
+    text-decoration: none;
+    font-weight: bold;
+}
 
-/* =========================================
-   Mobile / iPhone
-========================================= */
+.result-item {
+    padding: 12px;
+    background: #f0fdf4;
+    border-radius: 10px;
+    margin-bottom: 15px;
+}
 
-@media (max-width: 600px) {
+.hidden {
+    display: none !important;
+}
 
-    .app {
-        padding:
-            18px
-            12px
-            30px;
+@media (max-width: 480px) {
+
+    .container {
+        padding: 14px;
     }
 
-    .header {
-        margin-bottom: 15px;
-    }
-
-    .logo {
-        width: 46px;
-        height: 46px;
-
-        border-radius: 13px;
-
-        font-size: 23px;
-    }
-
-    .header h1 {
-        font-size: 21px;
-    }
-
-    .header p {
-        font-size: 13px;
+    .hero h1 {
+        font-size: 24px;
     }
 
     .card {
         padding: 16px;
-
-        border-radius: 17px;
     }
 
-    .upload-box {
-        min-height: 165px;
-    }
-
-    .upload-icon {
-        font-size: 35px;
-    }
-
-    .upload-box strong {
-        font-size: 14px;
-    }
-
-    .option-row {
-        padding: 12px;
-    }
-
-    .primary-btn,
-    .secondary-btn {
-        min-height: 50px;
-    }
-}
-
-
-/* =========================================
-   Small iPhone
-========================================= */
-
-@media (max-width: 380px) {
-
-    .app {
-        padding-left: 9px;
-        padding-right: 9px;
-    }
-
-    .card {
-        padding: 14px;
-    }
-
-    .header h1 {
-        font-size: 19px;
-    }
-
-    .card-title h2 {
-        font-size: 16px;
-    }
-
-    .option-text strong {
-        font-size: 13px;
-    }
 }
