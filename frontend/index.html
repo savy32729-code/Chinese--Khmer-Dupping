@@ -1,179 +1,145 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="km">
+
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title>Chinese → Khmer Dubbing</title>
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
 
-    <link rel="stylesheet" href="style.css">
+    <meta
+        name="theme-color"
+        content="#2563eb"
+    >
+
+    <title>
+        Chinese → Khmer Dubbing
+    </title>
+
+    <link
+        rel="stylesheet"
+        href="style.css"
+    >
 </head>
+
 
 <body>
 
-    <!-- HEADER -->
-    <header class="header">
-        <div class="logo">
-            🎬 <span>Chinese → Khmer</span>
-        </div>
+    <main class="app">
 
-        <div class="status">
-            <span class="status-dot"></span>
-            Online
-        </div>
-    </header>
+        <!-- =========================================
+             Header
+        ========================================== -->
 
+        <header class="header">
 
-    <!-- MAIN -->
-    <main class="container">
+            <div class="logo">
+                🎬
+            </div>
 
-        <!-- HERO -->
-        <section class="hero">
-            <h1>Chinese → Khmer Dubbing</h1>
+            <div>
+                <h1>
+                    Chinese → Khmer
+                </h1>
 
-            <p>
-                Upload your full video, translate it into Khmer,
-                select a voice and create short videos.
-            </p>
-        </section>
+                <p>
+                    Video Dubbing
+                </p>
+            </div>
+
+        </header>
 
 
-        <!-- UPLOAD -->
+        <!-- =========================================
+             Upload Card
+        ========================================== -->
+
         <section class="card">
 
             <div class="card-title">
-                <span>🎥</span>
+
+                <span>
+                    📹
+                </span>
+
                 <div>
-                    <h2>Upload Full Video</h2>
-                    <p>Select your original video</p>
+                    <h2>
+                        ជ្រើសរើសវីដេអូ
+                    </h2>
+
+                    <p>
+                        MP4, MOV, MKV, AVI, WEBM
+                    </p>
                 </div>
+
             </div>
 
-            <label for="videoInput" class="upload-box">
 
-                <div class="upload-icon">⬆️</div>
+            <label
+                for="videoInput"
+                class="upload-box"
+            >
 
-                <h3>Choose Full Video</h3>
+                <div class="upload-icon">
+                    ⬆️
+                </div>
 
-                <p>
-                    MP4, MOV, AVI, MKV
-                </p>
+                <strong>
+                    ចុចទីនេះដើម្បីជ្រើសរើសវីដេអូ
+                </strong>
 
-                <span class="upload-button">
-                    Choose Video
+                <span>
+                    ឬ Drag & Drop វីដេអូមកទីនេះ
                 </span>
 
             </label>
 
+
             <input
                 type="file"
                 id="videoInput"
-                accept="video/*"
+                accept="video/mp4,video/quicktime,video/x-matroska,video/x-msvideo,video/webm,.mov,.mp4,.mkv,.avi,.webm"
                 hidden
             >
 
-            <div id="videoInfo" class="video-info hidden"></div>
 
-        </section>
+            <!-- Video Info -->
 
-
-        <!-- VIDEO SETTINGS -->
-        <section class="card">
-
-            <div class="card-title">
-                <span>⚙️</span>
-
-                <div>
-                    <h2>Video Settings</h2>
-                    <p>Configure your video processing</p>
-                </div>
+            <div
+                id="videoInfo"
+                class="video-info"
+            >
+                មិនទាន់បានជ្រើសរើសវីដេអូ
             </div>
 
-
-            <!-- SHORT VIDEO -->
-            <div class="setting">
-
-                <label>
-                    ✂️ Short Video Duration
-                </label>
-
-                <div class="duration-box">
-                    <input
-                        type="number"
-                        id="duration"
-                        value="3"
-                        min="1"
-                        max="60"
-                    >
-
-                    <span>minutes</span>
-                </div>
-
-                <small>
-                    Each short video will be up to 3 minutes.
-                </small>
-
-            </div>
+            <div
+                id="duration"
+                class="file-size"
+            ></div>
 
 
-            <!-- VOICE -->
-            <div class="setting">
+            <!-- Translation Option -->
 
-                <label>
-                    🔊 Voice
-                </label>
+            <div class="option-row">
 
-                <div class="voice-options">
+                <div class="option-text">
 
-                    <button
-                        class="voice-btn active"
-                        data-voice="Auto"
-                    >
-                        <span>🤖</span>
-                        <strong>Auto</strong>
-                        <small>Automatic</small>
-                    </button>
-
-
-                    <button
-                        class="voice-btn"
-                        data-voice="Srey Mom"
-                    >
-                        <span>👩</span>
-                        <strong>Srey Mom</strong>
-                        <small>Female voice</small>
-                    </button>
-
-
-                    <button
-                        class="voice-btn"
-                        data-voice="Piseth"
-                    >
-                        <span>👨</span>
-                        <strong>Piseth</strong>
-                        <small>Male voice</small>
-                    </button>
-
-                </div>
-
-            </div>
-
-
-            <!-- TRANSLATION -->
-            <div class="translation">
-
-                <div class="translation-text">
-
-                    <span class="translation-icon">
+                    <span class="option-icon">
                         🌐
-                    </<div>
+                    </span>
+
+                    <div>
+
                         <strong>
-                            Auto Translate
+                            បកប្រែជាភាសាខ្មែរ
                         </strong>
 
-                        <p>
-                            Translate all languages → Khmer
-                        </p>
+                        <small>
+                            Chinese → Khmer
+                        </small>
+
                     </div>
 
                 </div>
@@ -193,39 +159,45 @@
 
             </div>
 
-        </section>
 
-
-        <!-- START -->
-        <section class="action-card">
+            <!-- Start Button -->
 
             <button
                 id="startBtn"
-                class="start-btn"
+                class="primary-btn"
+                disabled
             >
-                <span>▶</span>
-                START
-            </button>
 
-            <p class="start-note">
-                Start video translation and rendering
-            </p>
+                <span>
+                    🎙️
+                </span>
+
+                ចាប់ផ្តើម Dubbing
+
+            </button>
 
         </section>
 
 
-        <!-- PROGRESS -->
+        <!-- =========================================
+             Progress Card
+        ========================================== -->
+
         <section
             id="progressCard"
-            class="card hidden"
+            class="card progress-card"
+            style="display:none;"
         >
 
-            <div class="progress-header">
+            <div class="section-heading">
 
                 <div>
-                    <h2>Rendering Video</h2>
-                    <p id="progressText">
-                        Preparing...
+                    <h2>
+                        កំពុងដំណើរការ
+                    </h2>
+
+                    <p id="processingStatus">
+                        កំពុងរៀបចំ...
                     </p>
                 </div>
 
@@ -241,66 +213,80 @@
                 <div
                     id="progressFill"
                     class="progress-fill"
+                    style="width:0%;"
                 ></div>
 
             </div>
 
 
-            <div class="processing-info">
-
-                <span id="processingStatus">
-                    Preparing video...
-                </span>
-
-                <span>
-                    ⏱️ Processing
-                </span>
-
-            </div>
+            <p
+                id="progressText"
+                class="progress-text"
+            >
+                កំពុងរៀបចំ...
+            </p>
 
         </section>
 
 
-        <!-- RESULTS -->
+        <!-- =========================================
+             Results Card
+        ========================================== -->
+
         <section
             id="resultsCard"
-            class="card hidden"
+            class="card results-card"
+            style="display:none;"
         >
 
-            <div class="result-header">
+            <div class="section-heading">
 
                 <div>
-                    <h2>✅ Rendering Complete</h2>
+
+                    <h2>
+                        🎉 លទ្ធផល
+                    </h2>
 
                     <p>
-                        Your short videos are ready.
+                        សំឡេង និងការបកប្រែ
                     </p>
-                </div>
 
-                <button
-                    id="saveBtn"
-                    class="save-btn"
-                >
-                    💾 SAVE
-                </button>
+                </div>
 
             </div>
 
 
-            <div id="partsList" class="parts-list"></div>
+            <div
+                id="partsList"
+                class="parts-list"
+            ></div>
+
+
+            <button
+                id="saveBtn"
+                class="secondary-btn"
+            >
+
+                💾
+                រក្សាទុកអត្ថបទខ្មែរ
+
+            </button>
 
         </section>
 
 
-        <!-- FOOTER -->
+        <!-- =========================================
+             Footer
+        ========================================== -->
+
         <footer>
 
             <p>
-                © 2026 Chinese → Khmer Dubbing
+                Chinese → Khmer Video Dubbing
             </p>
 
-            <p>
-                Video Translation & Dubbing System
+            <p class="footer-small">
+                Powered by Whisper + Translation + TTS
             </p>
 
         </footer>
@@ -308,8 +294,13 @@
     </main>
 
 
-    <script src="script.js"></script>
+    <!-- JavaScript -->
+
+    <script
+        src="script.js"
+        defer
+    ></script>
 
 </body>
-</html>
 
+</html>
