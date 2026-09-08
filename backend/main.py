@@ -913,15 +913,14 @@ async def create_dubbing(
 
         ]
 
-                result = subprocess.run(
+result = subprocess.run(
             command,
             capture_output=True,
             text=True,
         )
-
-        if result.returncode != 0:
-            raise RuntimeError(
-                result.stderr[-4000:]
+if result.returncode != 0:
+    raise RuntimeError(
+        result.stderr[-4000:]
             )
 
         return {
