@@ -462,20 +462,15 @@ async def translate(
 # =========================================================
 
 @app.post("/tts")
-
 async def text_to_speech(data: TTSRequest):
 
     if not data.text or not data.text.strip():
-
         raise HTTPException(
-
             status_code=400,
-
             detail="Text cannot be empty"
-
         )
 
-        try:
+    try:
         filename = f"{uuid.uuid4()}.mp3"
         filepath = AUDIO_DIR / filename
 
