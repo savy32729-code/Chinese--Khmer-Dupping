@@ -124,10 +124,9 @@ class TTSRequest(BaseModel):
     voice: str = "km-KH-PisethNeural"
 
 class DubbingRequest(BaseModel):
-
     filename: str
-
     segments: list
+    voice: str = "km-KH-PisethNeural"
 
 # =========================================================
 
