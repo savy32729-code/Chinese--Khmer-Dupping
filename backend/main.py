@@ -481,7 +481,7 @@ async def text_to_speech(data: TTSRequest):
 
         filepath = AUDIO_DIR / filename
 
-        voice = "km-KH-PisethNeural"
+      voice = data.voice or "km-KH-PisethNeural"
 
         communicate = edge_tts.Communicate(
 
