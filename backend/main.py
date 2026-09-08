@@ -702,19 +702,16 @@ async def create_dubbing(
 
             )
 
-            tts = gTTS(
+            voice = "km-KH-PisethNeural"
 
-                text=text,
+communicate = edge_tts.Communicate(
+    text,
+    voice
+)
 
-                lang="km",
-
-            )
-
-            tts.save(
-
-                str(tts_file)
-
-            )
+await communicate.save(
+    str(tts_file)
+)
 
             audio_files.append(
 
