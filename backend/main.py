@@ -4,6 +4,7 @@ import uuid
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
+from faster_whisper import WhisperModel
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from gtts import gTTS
