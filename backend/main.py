@@ -923,22 +923,20 @@ async def create_dubbing(
 
         )
 
-        if result.returncode != 0:
+                if result.returncode != 0:
 
             raise RuntimeError(
-
                 result.stderr[-4000:]
-
             )
 
-                return {
+        return {
             "success": True,
             "filename": output_filename,
             "video_url": f"/video/{output_filename}",
             "message": "Khmer dubbed video created successfully",
         }
 
-    except HTTPException:
+        except HTTPException:
         raise
 
     except Exception as e:
