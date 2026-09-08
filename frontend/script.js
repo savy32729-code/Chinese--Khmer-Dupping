@@ -284,7 +284,9 @@ try {
             "Generating Khmer voice..."
         );
 
-
+console.log("TTS BODY:".{text:translationResult. translation,
+    lang: "km"
+   }),
         const ttsResponse =
             await fetch(
                 `${API_URL}/tts`,
@@ -309,12 +311,10 @@ try {
 
 
         if (!ttsResponse.ok) {
-
-            throw new Error(
-                "Khmer voice generation failed."
-            );
-        }
-
+        const errorData = await
+        ttsResponse. json();
+            console. log("TTS ERROR:",errorData);
+            throw new Error(JSON.stringify(errorData));}
 
         const ttsData =
             await ttsResponse.json();
