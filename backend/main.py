@@ -636,65 +636,33 @@ async def create_dubbing(
 
         )
 
-        # ---------------------------------------------
-
+             # ---------------------------------------------
         # Generate TTS for each segment
-
         # ---------------------------------------------
 
         audio_files = []
 
-        for index, segment in enumerate(
-
-            data.segments
-
-        ):
+        for index, segment in enumerate(data.segments):
 
             text = str(
-
-                segment.get(
-
-                    "translation",
-
-                    ""
-
-                )
-
+                segment.get("translation", "")
             ).strip()
 
             if not text:
-
                 continue
 
             start = float(
-
-                segment.get(
-
-                    "start",
-
-                    0
-
-                )
-
+                segment.get("start", 0)
             )
 
             end = float(
-
-                segment.get(
-
-                    "end",
-
-                    start + 1
-
-                )
-
+                segment.get("end", start + 1)
             )
 
             if end <= start:
-
                 end = start + 1
 
-                        tts_file = (
+            tts_file = (
                 work_dir /
                 f"tts_{index}.mp3"
             )
@@ -717,16 +685,6 @@ async def create_dubbing(
                     "end": end,
                 }
             )
-        if not audio_files:
-
-            raise HTTPException(
-
-                status_code=400,
-
-                detail="Could not create Khmer audio",
-
-            )
-
         # ---------------------------------------------
 
         # Create silent base audio
