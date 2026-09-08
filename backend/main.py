@@ -475,51 +475,31 @@ async def text_to_speech(data: TTSRequest):
 
         )
 
-    try:
-    filename = f"{uuid.uuid4()}.mp3"
-    filepath = AUDIO_DIR / filename
+        try:
+        filename = f"{uuid.uuid4()}.mp3"
+        filepath = AUDIO_DIR / filename
 
-    voice = data.voice or "km-KH-PisethNeural"
+        voice = data.voice or "km-KH-PisethNeural"
 
-    communicate = edge_tts.Communicate(
-        data.text,
-        voice
-    )
+        communicate = edge_tts.Communicate(
+            data.text,
+            voice
+        )
 
-    await communicate.save(str(filepath))
+        await communicate.save(str(filepath))
 
         return {
-
             "success": True,
-
             "filename": filename,
-
             "voice": voice,
-
             "audio_url": f"/audio/{filename}"
-
         }
 
     except Exception as e:
-
         raise HTTPException(
-
             status_code=500,
-
             detail=f"TTS generation failed: {str(e)}"
-
         )
-
-    except Exception as exc:
-
-        raise HTTPException(
-
-            status_code=500,
-
-            detail=f"TTS failed: {exc}",
-
-        ) from exc
-
 # =========================================================
 
 # Create Final Dubbing Video
