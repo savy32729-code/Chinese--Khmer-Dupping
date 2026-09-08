@@ -983,40 +983,21 @@ await communicate.save(
 
             )
 
-        return {
-
+                return {
             "success": True,
-
             "filename": output_filename,
-
-            "video_url":
-
-                f"/video/{output_filename}",
-
-            "message":
-
-                "Khmer dubbed video created successfully",
-
+            "video_url": f"/video/{output_filename}",
+            "message": "Khmer dubbed video created successfully",
         }
 
     except HTTPException:
-
         raise
 
-    except Exception as exc:
-
+    except Exception as e:
         raise HTTPException(
-
             status_code=500,
-
-            detail=(
-
-                "Dubbing video failed: "
-
-                f"{exc}"
-
-            ),
-
+            detail=f"Dubbing failed: {str(e)}"
+        )
         ) from exc
 
     finally:
