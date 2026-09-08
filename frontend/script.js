@@ -1,696 +1,847 @@
-const API_URL = “https://chinese-khmer-dupping.onrender.com”;
+const API_URL = "https://chinese-khmer-dupping.onrender.com";
 
-const videoInput = document.getElementById(“videoInput”);
-const videoInfo = document.getElementById(“videoInfo”);
-const durationInput = document.getElementById(“duration”);
-const voiceButtons = document.querySelectorAll(”.voice-btn”);
-const translateToggle = document.getElementById(“translateToggle”);
-const startBtn = document.getElementById(“startBtn”);
-const progressCard = document.getElementById(“progressCard”);
-const progressFill = document.getElementById(“progressFill”);
-const percentage = document.getElementById(“percentage”);
-const progressText = document.getElementById(“progressText”);
-const processingStatus = document.getElementById(“processingStatus”);
-const resultsCard = document.getElementById(“resultsCard”);
-const partsList = document.getElementById(“partsList”);
-const saveBtn = document.getElementById(“saveBtn”);
+const videoInput = document.getElementById("videoInput");
 
-let selectedVoice = “Auto”;
-let selectedVideo = null;
-let videoDuration = 0;
-let uploadedFilename = null;
-let transcriptionResult = null;
-let translationResult = null;
-let audioUrl = null;
+const videoInfo = document.getElementById("videoInfo");
 
-/* =========================================
-VIDEO UPLOAD / VIDEO INFORMATION
-========================================= */
+const duration = document.getElementById("duration");
 
-videoInput.addEventListener(“change”, function () {
-const file = this.files[0];
+const translateToggle = document.getElementById("translateToggle");
 
-if (!file) {
-    return;
-}
+const startBtn = document.getElementById("startBtn");
 
-selectedVideo = file;
+const progressCard = document.getElementById("progressCard");
 
-const video = document.createElement("video");
+const progressFill = document.getElementById("progressFill");
 
-video.preload = "metadata";
+const percentage = document.getElementById("percentage");
 
-video.onloadedmetadata = function () {
+const progressText = document.getElementById("progressText");
 
-    window.URL.revokeObjectURL(video.src);
+const processingStatus = document.getElementById("processingStatus");
 
-    videoDuration = video.duration;
+const resultsCard = document.getElementById("resultsCard");
 
-    const minutes = Math.floor(videoDuration / 60);
-    const seconds = Math.floor(videoDuration % 60);
+const partsList = document.getElementById("partsList");
 
-    videoInfo.classList.remove("hidden");
+const saveBtn = document.getElementById("saveBtn");
 
-    videoInfo.innerHTML = `
-        <strong>🎬 ${file.name}</strong>
-        <br>
-        📦 Size: ${formatFileSize(file.size)}
-        <br>
-        ⏱️ Duration: ${minutes}m ${seconds}s
-    `;
-};
+let selectedFile = null;
 
-video.src = URL.createObjectURL(file);
-});
+let translatedSegments = [];
 
-/* =========================================
-FILE SIZE
-========================================= */
+/* =====================================================
 
-function formatFileSize(bytes) {
-if (bytes < 1024 * 1024) {
+   Video Selected
 
-    return (
-        bytes / 1024
-    ).toFixed(1) + " KB";
+===================================================== */
 
-}
+videoInput.addEventListener("change", function () {
 
-return (
-    bytes / (1024 * 1024)
-).toFixed(2) + " MB";
-}
+    const file = this.files[0];
 
-/* =========================================
-VOICE SELECT
-========================================= */
+    if (!file) {
 
-voiceButtons.forEach(button => {
-button.addEventListener("click", function () {
+        selectedFile = null;
 
-    voiceButtons.forEach(btn => {
-        btn.classList.remove("active");
-    });
-
-    this.classList.add("active");
-
-    selectedVoice = this.dataset.voice;
-
-});
-});
-
-/* =========================================
-START REAL PROCESSING
-========================================= */
-
-startBtn.addEventListener(“click”, async function () {
-if (!selectedVideo) {
-
-    alert("Please choose a video first.");
-
-    return;
-}
-
-
-let duration = parseInt(durationInput.value);
-
-
-if (!duration || duration < 1) {
-
-    alert("Please enter a valid duration.");
-
-    return;
-}
-
-
-if (duration > 3) {
-
-    duration = 3;
-
-    durationInput.value = 3;
-
-    alert(
-        "Short video duration is limited to 3 minutes."
-    );
-}
-
-
-startBtn.disabled = true;
-
-progressCard.classList.remove("hidden");
-
-resultsCard.classList.add("hidden");
-
-progressFill.style.width = "0%";
-
-percentage.textContent = "0%";
-
-progressText.textContent = "Connecting to backend...";
-
-processingStatus.textContent = "Connecting to backend...";
-
-
-try {
-
-    /* ================================
-       STEP 1: UPLOAD VIDEO
-    ================================= */
-
-    updateProgress(
-        10,
-        "Uploading video..."
-    );
-
-
-    const formData = new FormData();
-
-    formData.append(
-        "file",
-        selectedVideo
-    );
-
-
-    const uploadResponse = await fetch(
-        `${API_URL}/upload`,
-        {
-            method: "POST",
-            body: formData
-        }
-    );
-
-
-    if (!uploadResponse.ok) {
-
-        throw new Error(
-            "Video upload failed."
-        );
-    }
-
-
-    const uploadData =
-        await uploadResponse.json();
-
-
-    uploadedFilename =
-        uploadData.filename;
-
-
-    /* ================================
-       STEP 2: TRANSCRIBE CHINESE
-    ================================= */
-
-    updateProgress(
-        30,
-        "Converting Chinese speech to text..."
-    );
-
-
-    const transcribeResponse =
-        await fetch(
-            `${API_URL}/transcribe?filename=${encodeURIComponent(uploadedFilename)}`,
-            {
-                method: "POST"
-            }
-        );
-
-
-    if (!transcribeResponse.ok) {
-
-        throw new Error(
-            "Chinese transcription failed."
-        );
-    }
-
-
-    transcriptionResult =
-        await transcribeResponse.json();
-
-
-    /* ================================
-       STEP 3: TRANSLATE TO KHMER
-    ================================= */
-
-    if (translateToggle.checked) {
-
-        updateProgress(
-            55,
-            "Translating Chinese to Khmer..."
-        );
-
-
-        const translateResponse =
-            await fetch(
-                `${API_URL}/translate`,
-                {
-                    method: "POST",
-
-                    headers: {
-                        "Content-Type":
-                            "application/json"
-                    },
-
-                    body: JSON.stringify({
-
-                        text:
-                            transcriptionResult.text,
-
-                        source: "zh",
-
-                        target: "km"
-
-                    })
-                }
-            );
-
-
-        if (!translateResponse.ok) {
-
-            throw new Error(
-                "Khmer translation failed."
-            );
-        }
-
-
-        translationResult =
-            await translateResponse.json();
-
-
-        /* ================================
-           STEP 4: KHMER TEXT TO SPEECH
-        ================================= */
-
-        updateProgress(
-            75,
-            "Generating Khmer voice..."
-        );
-
-console.log("TTS BODY:".{text:translationResult. translation,
-    lang: "km"
-   }),
-        const ttsResponse =
-            await fetch(
-                `${API_URL}/tts`,
-                {
-                    method: "POST",
-
-                    headers: {
-                        "Content-Type":
-                            "application/json"
-                    },
-
-                    body: JSON.stringify({
-
-                        text:
-                            translationResult.translation,
-
-                        lang: "km"
-
-                    })
-                }
-            );
-
-
-        if (!ttsResponse.ok) {
-        const errorData = await
-        ttsResponse. json();
-            console. log("TTS ERROR:",errorData);
-            throw new Error(JSON.stringify(errorData));}
-
-        const ttsData =
-            await ttsResponse.json();
-
-
-        audioUrl =
-            `${API_URL}${ttsData.audio_url}`;
+        return;
 
     }
 
+    selectedFile = file;
 
-    /* ================================
-       STEP 5: SHOW RESULT
-    ================================= */
+    videoInfo.textContent =
 
-    updateProgress(
-        90,
-        "Preparing results..."
-    );
+        `Selected: ${file.name}`;
 
+    if (duration) {
 
-    createParts(duration);
+        duration.textContent =
 
+            formatFileSize(file.size);
 
-    showTranscript();
-
-
-    updateProgress(
-        100,
-        "Completed!"
-    );
-
-
-    resultsCard.classList.remove(
-        "hidden"
-    );
-
-
-    processingStatus.textContent =
-        "Chinese video processed successfully.";
-
-
-} catch (error) {
-
-    console.error(error);
-
-    alert(
-        "Processing failed: " +
-        error.message
-    );
-
-    progressText.textContent =
-        "Processing failed.";
-
-    processingStatus.textContent =
-        error.message;
-
-} finally {
+    }
 
     startBtn.disabled = false;
 
-}
 });
 
-/* =========================================
-PROGRESS
-========================================= */
+/* =====================================================
+
+   Start Dubbing
+
+===================================================== */
+
+startBtn.addEventListener("click", async function () {
+
+    if (!selectedFile) {
+
+        alert("សូមជ្រើសរើសវីដេអូមុនសិន។");
+
+        return;
+
+    }
+
+    try {
+
+        startBtn.disabled = true;
+
+        progressCard.style.display = "block";
+
+        resultsCard.style.display = "none";
+
+        updateProgress(
+
+            5,
+
+            "Uploading video..."
+
+        );
+
+        /* =============================================
+
+           STEP 1 — Upload
+
+        ============================================= */
+
+        const formData = new FormData();
+
+        formData.append(
+
+            "file",
+
+            selectedFile
+
+        );
+
+        const uploadResponse =
+
+            await fetch(
+
+                `${API_URL}/upload`,
+
+                {
+
+                    method: "POST",
+
+                    body: formData
+
+                }
+
+            );
+
+        if (!uploadResponse.ok) {
+
+            throw new Error(
+
+                await getError(uploadResponse)
+
+            );
+
+        }
+
+        const uploadResult =
+
+            await uploadResponse.json();
+
+        const filename =
+
+            uploadResult.filename;
+
+        /* =============================================
+
+           STEP 2 — Transcribe
+
+        ============================================= */
+
+        updateProgress(
+
+            30,
+
+            "កំពុងស្តាប់សំឡេងចិន..."
+
+        );
+
+        const transcribeResponse =
+
+            await fetch(
+
+                `${API_URL}/transcribe?filename=${encodeURIComponent(filename)}`,
+
+                {
+
+                    method: "POST"
+
+                }
+
+            );
+
+        if (!transcribeResponse.ok) {
+
+            throw new Error(
+
+                await getError(transcribeResponse)
+
+            );
+
+        }
+
+        const transcription =
+
+            await transcribeResponse.json();
+
+        const segments =
+
+            transcription.segments || [];
+
+        /* =============================================
+
+           STEP 3 — Translate
+
+        ============================================= */
+
+        updateProgress(
+
+            55,
+
+            "កំពុងបកប្រែចិន → ខ្មែរ..."
+
+        );
+
+        translatedSegments = [];
+
+        for (
+
+            let i = 0;
+
+            i < segments.length;
+
+            i++
+
+        ) {
+
+            const segment = segments[i];
+
+            let khmerText =
+
+                segment.text;
+
+            if (
+
+                translateToggle &&
+
+                translateToggle.checked
+
+            ) {
+
+                const translateResponse =
+
+                    await fetch(
+
+                        `${API_URL}/translate`,
+
+                        {
+
+                            method: "POST",
+
+                            headers: {
+
+                                "Content-Type":
+
+                                    "application/json"
+
+                            },
+
+                            body: JSON.stringify({
+
+                                text: segment.text,
+
+                                source: "zh",
+
+                                target: "km"
+
+                            })
+
+                        }
+
+                    );
+
+                if (!translateResponse.ok) {
+
+                    throw new Error(
+
+                        await getError(
+
+                            translateResponse
+
+                        )
+
+                    );
+
+                }
+
+                const result =
+
+                    await translateResponse.json();
+
+                khmerText =
+
+                    result.translation ||
+
+                    segment.text;
+
+            }
+
+            translatedSegments.push({
+
+                start: segment.start,
+
+                end: segment.end,
+
+                original: segment.text,
+
+                translation: khmerText
+
+            });
+
+            const percent =
+
+                55 +
+
+                Math.round(
+
+                    ((i + 1) /
+
+                        segments.length) *
+
+                    25
+
+                );
+
+            updateProgress(
+
+                percent,
+
+                `កំពុងបកប្រែ ${i + 1}/${segments.length}...`
+
+            );
+
+        }
+
+        /* =============================================
+
+           STEP 4 — Khmer TTS
+
+        ============================================= */
+
+        updateProgress(
+
+            85,
+
+            "កំពុងបង្កើតសំឡេងខ្មែរ..."
+
+        );
+
+        for (
+
+            let i = 0;
+
+            i < translatedSegments.length;
+
+            i++
+
+        ) {
+
+            const item =
+
+                translatedSegments[i];
+
+            if (!item.translation) {
+
+                continue;
+
+            }
+
+            const ttsResponse =
+
+                await fetch(
+
+                    `${API_URL}/tts`,
+
+                    {
+
+                        method: "POST",
+
+                        headers: {
+
+                            "Content-Type":
+
+                                "application/json"
+
+                        },
+
+                        body: JSON.stringify({
+
+                            text: item.translation,
+
+                            lang: "km"
+
+                        })
+
+                    }
+
+                );
+
+            if (!ttsResponse.ok) {
+
+                throw new Error(
+
+                    await getError(
+
+                        ttsResponse
+
+                    )
+
+                );
+
+            }
+
+            const ttsResult =
+
+                await ttsResponse.json();
+
+            item.audioUrl =
+
+                `${API_URL}${ttsResult.audio_url}`;
+
+        }
+
+        /* =============================================
+
+           STEP 5 — Show Results
+
+        ============================================= */
+
+        updateProgress(
+
+            100,
+
+            "រួចរាល់! 🎉"
+
+        );
+
+        showResults();
+
+    } catch (error) {
+
+        console.error(
+
+            "Dubbing Error:",
+
+            error
+
+        );
+
+        alert(
+
+            "មានបញ្ហា៖ " +
+
+            error.message
+
+        );
+
+        updateProgress(
+
+            0,
+
+            "មានបញ្ហាក្នុងការដំណើរការ"
+
+        );
+
+    } finally {
+
+        startBtn.disabled = false;
+
+    }
+
+});
+
+/* =====================================================
+
+   Progress
+
+===================================================== */
 
 function updateProgress(
-value,
-text
-) {
-progressFill.style.width =
-    value + "%";
 
-percentage.textContent =
-    value + "%";
+    percent,
 
-progressText.textContent =
-    text;
+    text
 
-processingStatus.textContent =
-    text;
-}
-
-/* =========================================
-SHOW TRANSCRIPT
-========================================= */
-
-function showTranscript() {
-if (!transcriptionResult) {
-    return;
-}
-
-
-const transcript =
-    document.createElement("div");
-
-transcript.className =
-    "transcript-result";
-
-
-const originalTitle =
-    document.createElement("h3");
-
-originalTitle.textContent =
-    "🇨🇳 Chinese Transcript";
-
-
-const originalText =
-    document.createElement("p");
-
-originalText.textContent =
-    transcriptionResult.text;
-
-
-transcript.appendChild(
-    originalTitle
-);
-
-transcript.appendChild(
-    originalText
-);
-
-
-if (
-    translationResult &&
-    translationResult.translation
 ) {
 
-    const translatedTitle =
-        document.createElement("h3");
+    if (progressFill) {
 
-    translatedTitle.textContent =
-        "🇰🇭 Khmer Translation";
+        progressFill.style.width =
 
+            `${percent}%`;
 
-    const translatedText =
-        document.createElement("p");
+    }
 
-    translatedText.textContent =
-        translationResult.translation;
+    if (percentage) {
 
+        percentage.textContent =
 
-    transcript.appendChild(
-        translatedTitle
-    );
+            `${percent}%`;
 
-    transcript.appendChild(
-        translatedText
+    }
+
+    if (progressText) {
+
+        progressText.textContent =
+
+            text;
+
+    }
+
+    if (processingStatus) {
+
+        processingStatus.textContent =
+
+            text;
+
+    }
+
+}
+
+/* =====================================================
+
+   Show Results
+
+===================================================== */
+
+function showResults() {
+
+    if (!resultsCard) {
+
+        return;
+
+    }
+
+    resultsCard.style.display =
+
+        "block";
+
+    partsList.innerHTML = "";
+
+    if (
+
+        translatedSegments.length === 0
+
+    ) {
+
+        partsList.innerHTML =
+
+            `<p>រកមិនឃើញសំឡេងក្នុងវីដេអូទេ។</p>`;
+
+        return;
+
+    }
+
+    translatedSegments.forEach(
+
+        (item, index) => {
+
+            const part =
+
+                document.createElement("div");
+
+            part.className =
+
+                "result-part";
+
+            part.innerHTML = `
+
+                <div class="part-number">
+
+                    ${index + 1}
+
+                </div>
+
+                <div class="part-content">
+
+                    <div class="original-text">
+
+                        ${escapeHtml(
+
+                            item.original
+
+                        )}
+
+                    </div>
+
+                    <div class="translation-text">
+
+                        ${escapeHtml(
+
+                            item.translation
+
+                        )}
+
+                    </div>
+
+                    ${
+
+                        item.audioUrl
+
+                        ? `
+
+                        <audio
+
+                            controls
+
+                            preload="none"
+
+                            src="${item.audioUrl}">
+
+                        </audio>
+
+                        `
+
+                        : ""
+
+                    }
+
+                </div>
+
+            `;
+
+            partsList.appendChild(
+
+                part
+
+            );
+
+        }
+
     );
 
 }
 
+/* =====================================================
 
-if (audioUrl) {
+   Save Results
 
-    const audioTitle =
-        document.createElement("h3");
+===================================================== */
 
-    audioTitle.textContent =
-        "🔊 Khmer Voice";
+if (saveBtn) {
 
+    saveBtn.addEventListener(
 
-    const audio =
-        document.createElement("audio");
+        "click",
 
-    audio.controls = true;
+        function () {
 
-    audio.src = audioUrl;
+            if (
 
+                translatedSegments.length === 0
 
-    transcript.appendChild(
-        audioTitle
-    );
+            ) {
 
-    transcript.appendChild(
-        audio
+                alert(
+
+                    "មិនមានលទ្ធផលសម្រាប់រក្សាទុកទេ។"
+
+                );
+
+                return;
+
+            }
+
+            const text =
+
+                translatedSegments
+
+                    .map(
+
+                        (item, index) =>
+
+                            `${index + 1}. ${item.translation}`
+
+                    )
+
+                    .join("\n");
+
+            const blob =
+
+                new Blob(
+
+                    [text],
+
+                    {
+
+                        type:
+
+                            "text/plain;charset=utf-8"
+
+                    }
+
+                );
+
+            const url =
+
+                URL.createObjectURL(blob);
+
+            const link =
+
+                document.createElement("a");
+
+            link.href = url;
+
+            link.download =
+
+                "chinese-khmer-dubbing.txt";
+
+            document.body.appendChild(
+
+                link
+
+            );
+
+            link.click();
+
+            link.remove();
+
+            URL.revokeObjectURL(url);
+
+        }
+
     );
 
 }
 
+/* =====================================================
 
-resultsCard.prepend(
-    transcript
-);
-}
+   Error Helper
 
-/* =========================================
-CREATE VIDEO PART LIST
-========================================= */
+===================================================== */
 
-function createParts(durationMinutes) {
-partsList.innerHTML = "";
+async function getError(
 
-let numberOfParts = 1;
+    response
 
+) {
 
-if (videoDuration > 0) {
+    try {
 
-    numberOfParts =
-        Math.ceil(
-            videoDuration /
-            (durationMinutes * 60)
+        const data =
+
+            await response.json();
+
+        return (
+
+            data.detail ||
+
+            data.message ||
+
+            `Server error ${response.status}`
+
         );
 
-}
+    } catch {
 
+        return (
 
-for (
-    let i = 1;
-    i <= numberOfParts;
-    i++
-) {
+            `Server error ${response.status}`
 
-    const start =
-        (i - 1) *
-        durationMinutes *
-        60;
-
-
-    const end =
-        Math.min(
-            i *
-            durationMinutes *
-            60,
-            videoDuration
         );
 
+    }
 
-    const part =
+}
+
+/* =====================================================
+
+   File Size
+
+===================================================== */
+
+function formatFileSize(
+
+    bytes
+
+) {
+
+    if (bytes === 0) {
+
+        return "0 Bytes";
+
+    }
+
+    const units = [
+
+        "Bytes",
+
+        "KB",
+
+        "MB",
+
+        "GB"
+
+    ];
+
+    const i =
+
+        Math.floor(
+
+            Math.log(bytes) /
+
+            Math.log(1024)
+
+        );
+
+    return (
+
+        parseFloat(
+
+            (
+
+                bytes /
+
+                Math.pow(1024, i)
+
+            ).toFixed(2)
+
+        ) +
+
+        " " +
+
+        units[i]
+
+    );
+
+}
+
+/* =====================================================
+
+   Escape HTML
+
+===================================================== */
+
+function escapeHtml(
+
+    text
+
+) {
+
+    const div =
+
         document.createElement("div");
 
+    div.textContent =
 
-    part.className =
-        "part";
+        text || "";
 
-
-    part.innerHTML = `
-
-        <div class="part-info">
-
-            <div class="part-icon">
-                🎬
-            </div>
-
-            <div>
-
-                <strong>
-                    Short Video ${i}
-                </strong>
-
-                <small>
-                    ${formatTime(start)}
-                    -
-                    ${formatTime(end)}
-                </small>
-
-            </div>
-
-        </div>
-
-        <div class="part-status">
-            ✓ Ready
-        </div>
-
-    `;
-
-
-    partsList.appendChild(part);
-
-}
-}
-
-/* =========================================
-FORMAT TIME
-========================================= */
-
-function formatTime(seconds) {
-const mins =
-    Math.floor(seconds / 60);
-
-const secs =
-    Math.floor(seconds % 60);
-
-
-return (
-    String(mins).padStart(2, "0")
-    +
-    ":"
-    +
-    String(secs).padStart(2, "0")
-);
-}
-
-/* =========================================
-SAVE PROJECT
-========================================= */
-
-saveBtn.addEventListener(
-“click”,
-function () {
-    const information = {
-
-        website:
-            "Chinese → Khmer Dubbing",
-
-        originalVideo:
-            selectedVideo
-                ? selectedVideo.name
-                : null,
-
-        voice:
-            selectedVoice,
-
-        translateTo:
-            translateToggle.checked
-                ? "Khmer"
-                : "Disabled",
-
-        chineseTranscript:
-            transcriptionResult
-                ? transcriptionResult.text
-                : null,
-
-        khmerTranslation:
-            translationResult
-                ? translationResult.translation
-                : null,
-
-        audio:
-            audioUrl,
-
-        shortDuration:
-            durationInput.value +
-            " minutes",
-
-        status:
-            "Rendering completed"
-
-    };
-
-
-    const blob =
-        new Blob(
-            [
-                JSON.stringify(
-                    information,
-                    null,
-                    2
-                )
-            ],
-            {
-                type:
-                    "application/json"
-            }
-        );
-
-
-    const url =
-        URL.createObjectURL(blob);
-
-
-    const a =
-        document.createElement("a");
-
-
-    a.href = url;
-
-    a.download =
-        "dubbing-project.json";
-
-
-    a.click();
-
-
-    URL.revokeObjectURL(url);
+    return div.innerHTML;
 
 }
