@@ -1,829 +1,372 @@
 const API_URL = "https://chinese-khmer-dupping.onrender.com";
 
 const videoInput = document.getElementById("videoInput");
-
 const videoInfo = document.getElementById("videoInfo");
-
 const duration = document.getElementById("duration");
+const translateToggle = document.getElementById("translateToggle");
+const voiceSelect = document.getElementById("voiceSelect");
+const startBtn = document.getElementById("startBtn");
 
-const translateToggle =
+const progressCard = document.getElementById("progressCard");
+const progressFill = document.getElementById("progressFill");
+const percentage = document.getElementById("percentage");
+const progressText = document.getElementById("progressText");
+const processingStatus = document.getElementById("processingStatus");
 
-    document.getElementById("translateToggle");
-
-const startBtn =
-
-    document.getElementById("startBtn");
-
-const progressCard =
-
-    document.getElementById("progressCard");
-
-const progressFill =
-
-    document.getElementById("progressFill");
-
-const percentage =
-
-    document.getElementById("percentage");
-
-const progressText =
-
-    document.getElementById("progressText");
-
-const processingStatus =
-
-    document.getElementById("processingStatus");
-
-const resultsCard =
-
-    document.getElementById("resultsCard");
-
-const partsList =
-
-    document.getElementById("partsList");
-
-const saveBtn =
-
-    document.getElementById("saveBtn");
+const resultsCard = document.getElementById("resultsCard");
+const partsList = document.getElementById("partsList");
+const saveBtn = document.getElementById("saveBtn");
 
 let selectedFile = null;
 
-let translatedSegments = [];
 
-let finalVideoUrl = null;
+// ================================
+// VIDEO SELECT
+// ================================
 
-/* =====================================================
+videoInput.addEventListener("change", () => {
 
-   Select Video
+    selectedFile = videoInput.files[0];
 
-===================================================== */
-
-videoInput.addEventListener(
-
-    "change",
-
-    function () {
-
-        const file = this.files[0];
-
-        if (!file) {
-
-            selectedFile = null;
-
-            startBtn.disabled = true;
-
-            return;
-
-        }
-
-        selectedFile = file;
-
-        videoInfo.textContent =
-
-            `📹 ${file.name}`;
-
-        duration.textContent =
-
-            formatFileSize(file.size);
-
-        startBtn.disabled = false;
-
-        resultsCard.style.display =
-
-            "none";
-
+    if (!selectedFile) {
+        videoInfo.textContent = "មិនទាន់បានជ្រើស Video";
+        duration.textContent = "";
+        startBtn.disabled = true;
+        return;
     }
 
-);
+    videoInfo.textContent =
+        `📹 ${selectedFile.name}`;
 
-/* =====================================================
+    const sizeMB =
+        (selectedFile.size / 1024 / 1024).toFixed(2);
 
-   Start Dubbing
+    duration.textContent =
+        `ទំហំ: ${sizeMB} MB`;
 
-===================================================== */
+    startBtn.disabled = false;
 
-startBtn.addEventListener(
+});
 
-    "click",
 
-    async function () {
+// ================================
+// PROGRESS
+// ================================
 
-        if (!selectedFile) {
+function setProgress(value, text) {
 
-            alert(
+    progressFill.style.width = `${value}%`;
 
-                "សូមជ្រើសរើសវីដេអូមុនសិន។"
+    percentage.textContent =
+        `${value}%`;
 
-            );
-
-            return;
-
-        }
-
-        try {
-
-            startBtn.disabled = true;
-
-            progressCard.style.display =
-
-                "block";
-
-            resultsCard.style.display =
-
-                "none";
-
-            finalVideoUrl = null;
-
-            /* -----------------------------------------
-
-               STEP 1 — Upload
-
-            ----------------------------------------- */
-
-            updateProgress(
-
-                5,
-
-                "កំពុង Upload វីដេអូ..."
-
-            );
-
-            const formData =
-
-                new FormData();
-
-            formData.append(
-
-                "file",
-
-                selectedFile
-
-            );
-
-            const uploadResponse =
-
-                await fetch(
-
-                    `${API_URL}/upload`,
-
-                    {
-
-                        method: "POST",
-
-                        body: formData
-
-                    }
-
-                );
-
-            if (!uploadResponse.ok) {
-
-                throw new Error(
-
-                    await getError(
-
-                        uploadResponse
-
-                    )
-
-                );
-
-            }
-
-            const uploadResult =
-
-                await uploadResponse.json();
-
-            const filename =
-
-                uploadResult.filename;
-
-            /* -----------------------------------------
-
-               STEP 2 — Transcription
-
-            ----------------------------------------- */
-
-            updateProgress(
-
-                25,
-
-                "🎧 កំពុងស្តាប់សំឡេងចិន..."
-
-            );
-
-            const transcribeResponse =
-
-                await fetch(
-
-                    `${API_URL}/transcribe?filename=${encodeURIComponent(filename)}`,
-
-                    {
-
-                        method: "POST"
-
-                    }
-
-                );
-
-            if (!transcribeResponse.ok) {
-
-                throw new Error(
-
-                    await getError(
-
-                        transcribeResponse
-
-                    )
-
-                );
-
-            }
-
-            const transcription =
-
-                await transcribeResponse.json();
-
-            const segments =
-
-                transcription.segments || [];
-
-            if (segments.length === 0) {
-
-                throw new Error(
-
-                    "មិនអាចរកឃើញសំឡេងចិនក្នុងវីដេអូទេ។"
-
-                );
-
-            }
-
-            /* -----------------------------------------
-
-               STEP 3 — Translate
-
-            ----------------------------------------- */
-
-            translatedSegments = [];
-
-            for (
-
-                let i = 0;
-
-                i < segments.length;
-
-                i++
-
-            ) {
-
-                const segment =
-
-                    segments[i];
-
-                let khmerText =
-
-                    segment.text;
-
-                if (
-
-                    translateToggle.checked
-
-                ) {
-
-                    const translateResponse =
-
-                        await fetch(
-
-                            `${API_URL}/translate`,
-
-                            {
-
-                                method: "POST",
-
-                                headers: {
-
-                                    "Content-Type":
-
-                                        "application/json"
-
-                                },
-
-                                body:
-
-                                    JSON.stringify({
-
-                                        text:
-
-                                            segment.text,
-
-                                        source:
-
-                                            "zh",
-
-                                        target:
-
-                                            "km"
-
-                                    })
-
-                            }
-
-                        );
-
-                    if (
-
-                        !translateResponse.ok
-
-                    ) {
-
-                        throw new Error(
-
-                            await getError(
-
-                                translateResponse
-
-                            )
-
-                        );
-
-                    }
-
-                    const translateResult =
-
-                        await translateResponse.json();
-
-                    khmerText =
-
-                        translateResult.translation ||
-
-                        segment.text;
-
-                }
-
-                translatedSegments.push({
-
-                    start:
-
-                        Number(segment.start),
-
-                    end:
-
-                        Number(segment.end),
-
-                    original:
-
-                        segment.text,
-
-                    translation:
-
-                        khmerText
-
-                });
-
-                const percent =
-
-                    30 +
-
-                    Math.round(
-
-                        (
-
-                            (i + 1) /
-
-                            segments.length
-
-                        ) * 30
-
-                    );
-
-                updateProgress(
-
-                    percent,
-
-                    `🌐 បកប្រែ ${i + 1}/${segments.length}...`
-
-                );
-
-            }
-
-            /* -----------------------------------------
-
-               STEP 4 — Create Final Dubbing Video
-
-            ----------------------------------------- */
-
-            updateProgress(
-
-                65,
-
-                "🎙️ កំពុងបង្កើតសំឡេងខ្មែរ..."
-
-            );
-
-            const dubbingResponse =
-
-                await fetch(
-
-                    `${API_URL}/create-dubbing`,
-
-                    {
-
-                        method: "POST",
-
-                        headers: {
-
-                            "Content-Type":
-
-                                "application/json"
-
-                        },
-
-                        body:
-
-                            JSON.stringify({
-
-                                filename:
-
-                                    filename,
-
-                                segments:
-
-                                    translatedSegments
-
-                            })
-
-                    }
-
-                );
-
-            if (!dubbingResponse.ok) {
-
-                throw new Error(
-
-                    await getError(
-
-                        dubbingResponse
-
-                    )
-
-                );
-
-            }
-
-            const dubbingResult =
-
-                await dubbingResponse.json();
-
-            if (
-
-                !dubbingResult.success ||
-
-                !dubbingResult.video_url
-
-            ) {
-
-                throw new Error(
-
-                    "Server មិនបានបង្កើត Final Video ទេ។"
-
-                );
-
-            }
-
-            finalVideoUrl =
-
-                `${API_URL}${dubbingResult.video_url}`;
-
-            /* -----------------------------------------
-
-               STEP 5 — Complete
-
-            ----------------------------------------- */
-
-            updateProgress(
-
-                100,
-
-                "🎉 Final Video រួចរាល់!"
-
-            );
-
-            showFinalVideo(
-
-                finalVideoUrl
-
-            );
-
-        } catch (error) {
-
-            console.error(
-
-                "Dubbing Error:",
-
-                error
-
-            );
-
-            updateProgress(
-
-                0,
-
-                "❌ មានបញ្ហា"
-
-            );
-
-            alert(
-
-                "មានបញ្ហា៖\n\n" +
-
-                error.message
-
-            );
-
-        } finally {
-
-            startBtn.disabled = false;
-
-        }
-
-    }
-
-);
-
-/* =====================================================
-
-   Show Final Video
-
-===================================================== */
-
-function showFinalVideo(
-
-    videoUrl
-
-) {
-
-    resultsCard.style.display =
-
-        "block";
-
-    partsList.innerHTML = "";
-
-    const title =
-
-        document.createElement(
-
-            "h3"
-
-        );
-
-    title.textContent =
-
-        "🎬 Final Khmer Dubbed Video";
-
-    title.style.marginBottom =
-
-        "12px";
-
-    const video =
-
-        document.createElement(
-
-            "video"
-
-        );
-
-    video.controls = true;
-
-    video.playsInline = true;
-
-    video.preload = "metadata";
-
-    video.src =
-
-        videoUrl;
-
-    video.style.width =
-
-        "100%";
-
-    video.style.borderRadius =
-
-        "14px";
-
-    video.style.background =
-
-        "#000";
-
-    const download =
-
-        document.createElement(
-
-            "a"
-
-        );
-
-    download.href =
-
-        videoUrl;
-
-    download.download =
-
-        "khmer-dubbed-video.mp4";
-
-    download.target =
-
-        "_blank";
-
-    download.className =
-
-        "secondary-btn";
-
-    download.style.display =
-
-        "flex";
-
-    download.style.alignItems =
-
-        "center";
-
-    download.style.justifyContent =
-
-        "center";
-
-    download.style.textDecoration =
-
-        "none";
-
-    download.textContent =
-
-        "📥 បើក / រក្សាទុក Final MP4";
-
-    partsList.appendChild(
-
-        title
-
-    );
-
-    partsList.appendChild(
-
-        video
-
-    );
-
-    partsList.appendChild(
-
-        download
-
-    );
+    progressText.textContent =
+        text;
 
 }
 
-/* =====================================================
 
-   Progress
+// ================================
+// START DUBBING
+// ================================
 
-===================================================== */
+startBtn.addEventListener("click", async () => {
 
-function updateProgress(
-
-    percent,
-
-    text
-
-) {
-
-    if (progressFill) {
-
-        progressFill.style.width =
-
-            `${percent}%`;
-
+    if (!selectedFile) {
+        alert("សូមជ្រើស Video ជាមុនសិន");
+        return;
     }
 
-    if (percentage) {
+    startBtn.disabled = true;
 
-        percentage.textContent =
+    progressCard.classList.remove("hidden");
+    resultsCard.classList.add("hidden");
 
-            `${percent}%`;
-
-    }
-
-    if (progressText) {
-
-        progressText.textContent =
-
-            text;
-
-    }
-
-    if (processingStatus) {
-
-        processingStatus.textContent =
-
-            text;
-
-    }
-
-}
-
-/* =====================================================
-
-   Error
-
-===================================================== */
-
-async function getError(
-
-    response
-
-) {
+    setProgress(
+        5,
+        "កំពុង Upload Video..."
+    );
 
     try {
 
-        const data =
+        // =========================
+        // 1. UPLOAD
+        // =========================
 
-            await response.json();
+        const formData = new FormData();
 
-        return (
-
-            data.detail ||
-
-            data.message ||
-
-            `Server Error ${response.status}`
-
+        formData.append(
+            "file",
+            selectedFile
         );
 
-    } catch {
+        const uploadResponse =
+            await fetch(
+                `${API_URL}/upload`,
+                {
+                    method: "POST",
+                    body: formData
+                }
+            );
 
-        return (
+        if (!uploadResponse.ok) {
+            throw new Error(
+                "Upload Video បរាជ័យ"
+            );
+        }
 
-            `Server Error ${response.status}`
+        const uploadData =
+            await uploadResponse.json();
 
+        setProgress(
+            20,
+            "Upload បានជោគជ័យ..."
         );
+
+
+        // =========================
+        // 2. TRANSCRIBE
+        // =========================
+
+        const filename =
+            uploadData.filename ||
+            selectedFile.name;
+
+        setProgress(
+            30,
+            "កំពុងស្តាប់សំឡេងក្នុង Video..."
+        );
+
+        const transcribeResponse =
+            await fetch(
+                `${API_URL}/transcribe?filename=${encodeURIComponent(filename)}`,
+                {
+                    method: "POST"
+                }
+            );
+
+        if (!transcribeResponse.ok) {
+            throw new Error(
+                "Transcribe បរាជ័យ"
+            );
+        }
+
+        const transcribeData =
+            await transcribeResponse.json();
+
+        let segments =
+            transcribeData.segments || [];
+
+        if (!segments.length) {
+            throw new Error(
+                "រកមិនឃើញសំឡេងក្នុង Video"
+            );
+        }
+
+
+        // =========================
+        // 3. TRANSLATE
+        // =========================
+
+        if (translateToggle.checked) {
+
+            setProgress(
+                45,
+                "កំពុងបកប្រែ Chinese → Khmer..."
+            );
+
+            for (
+                let i = 0;
+                i < segments.length;
+                i++
+            ) {
+
+                const segment =
+                    segments[i];
+
+                const translateResponse =
+                    await fetch(
+                        `${API_URL}/translate`,
+                        {
+                            method: "POST",
+
+                            headers: {
+                                "Content-Type":
+                                    "application/json"
+                            },
+
+                            body: JSON.stringify({
+                                text:
+                                    segment.text || ""
+                            })
+                        }
+                    );
+
+                if (!translateResponse.ok) {
+                    throw new Error(
+                        "Translation បរាជ័យ"
+                    );
+                }
+
+                const translateData =
+                    await translateResponse.json();
+
+                segment.translation =
+                    translateData.translation ||
+                    segment.text ||
+                    "";
+
+                const progress =
+                    45 +
+                    Math.round(
+                        ((i + 1) /
+                            segments.length) *
+                        25
+                    );
+
+                setProgress(
+                    progress,
+                    `កំពុងបកប្រែ ${i + 1}/${segments.length}...`
+                );
+            }
+
+        } else {
+
+            segments.forEach(
+                segment => {
+
+                    segment.translation =
+                        segment.text || "";
+
+                }
+            );
+
+        }
+
+
+        // =========================
+        // 4. CREATE DUBBING
+        // =========================
+
+        setProgress(
+            75,
+            "កំពុងបង្កើតសំឡេងខ្មែរ..."
+        );
+
+        processingStatus.textContent =
+            `🎙️ សំឡេង: ${voiceSelect.value}`;
+
+
+        const dubbingResponse =
+            await fetch(
+                `${API_URL}/create-dubbing`,
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body: JSON.stringify({
+
+                        filename: filename,
+
+                        voice:
+                            voiceSelect.value,
+
+                        segments:
+                            segments
+
+                    })
+                }
+            );
+
+
+        if (!dubbingResponse.ok) {
+
+            const errorText =
+                await dubbingResponse.text();
+
+            throw new Error(
+                `Dubbing បរាជ័យ: ${errorText}`
+            );
+
+        }
+
+
+        const dubbingData =
+            await dubbingResponse.json();
+
+
+        setProgress(
+            95,
+            "កំពុងរៀបចំ Video ចុងក្រោយ..."
+        );
+
+
+        // =========================
+        // 5. RESULT
+        // =========================
+
+        const outputFilename =
+            dubbingData.filename ||
+            filename;
+
+        const videoUrl =
+            `${API_URL}/video/${encodeURIComponent(outputFilename)}`;
+
+
+        setProgress(
+            100,
+            "រួចរាល់! 🎉"
+        );
+
+
+        saveBtn.href =
+            videoUrl;
+
+        partsList.innerHTML = "";
+
+
+        const resultInfo =
+            document.createElement("div");
+
+        resultInfo.className =
+            "result-item";
+
+        resultInfo.textContent =
+            "✅ Video Khmer ត្រូវបានបង្កើតរួចរាល់";
+
+        partsList.appendChild(
+            resultInfo
+        );
+
+
+        resultsCard.classList.remove(
+            "hidden"
+        );
+
+
+    } catch (error) {
+
+        console.error(error);
+
+        alert(
+            error.message ||
+            "មានបញ្ហា សូមព្យាយាមម្តងទៀត"
+        );
+
+        progressText.textContent =
+            "❌ មានបញ្ហា";
+
+        processingStatus.textContent =
+            error.message || "";
+
+    } finally {
+
+        startBtn.disabled = false;
 
     }
 
-}
-
-/* =====================================================
-
-   File Size
-
-===================================================== */
-
-function formatFileSize(
-
-    bytes
-
-) {
-
-    if (bytes === 0) {
-
-        return "0 Bytes";
-
-    }
-
-    const units = [
-
-        "Bytes",
-
-        "KB",
-
-        "MB",
-
-        "GB"
-
-    ];
-
-    const i =
-
-        Math.floor(
-
-            Math.log(bytes) /
-
-            Math.log(1024)
-
-        );
-
-    return (
-
-        parseFloat(
-
-            (
-
-                bytes /
-
-                Math.pow(1024, i)
-
-            ).toFixed(2)
-
-        ) +
-
-        " " +
-
-        units[i]
-
-    );
-
-}
+});
