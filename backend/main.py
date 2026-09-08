@@ -913,18 +913,13 @@ async def create_dubbing(
 
         ]
 
-        result = subprocess.run(
-
+                result = subprocess.run(
             command,
-
             capture_output=True,
-
             text=True,
-
         )
 
-                if result.returncode != 0:
-
+        if result.returncode != 0:
             raise RuntimeError(
                 result.stderr[-4000:]
             )
@@ -936,7 +931,7 @@ async def create_dubbing(
             "message": "Khmer dubbed video created successfully",
         }
 
-        except HTTPException:
+    except HTTPException:
         raise
 
     except Exception as e:
