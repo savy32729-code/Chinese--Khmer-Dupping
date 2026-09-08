@@ -913,14 +913,15 @@ async def create_dubbing(
 
         ]
 
-result = subprocess.run(
+        result = subprocess.run(
             command,
             capture_output=True,
             text=True,
         )
-if result.returncode != 0:
-    raise RuntimeError(
-        result.stderr[-4000:]
+
+        if result.returncode != 0:
+            raise RuntimeError(
+                result.stderr[-4000:]
             )
 
         return {
@@ -933,14 +934,11 @@ if result.returncode != 0:
     except HTTPException:
         raise
 
-    except Exception as e:
+    except Exception as exc:
         raise HTTPException(
             status_code=500,
-            detail=f"Dubbing failed: {str(e)}"
-        )
+            detail=f"Dubbing failed: {exc}",
         ) from exc
-
-    finally:
 
         # ---------------------------------------------
 
