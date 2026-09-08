@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse
 
 from faster_whisper import WhisperModel
 
-from gtts import gTTS
+import edge_tts
 
 from pydantic import BaseModel
 
