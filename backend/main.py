@@ -119,10 +119,9 @@ class TranslateRequest(BaseModel):
     target: str = "km"
 
 class TTSRequest(BaseModel):
-
     text: str
-
     lang: str = "km"
+    voice: str = "km-KH-PisethNeural"
 
 class DubbingRequest(BaseModel):
 
