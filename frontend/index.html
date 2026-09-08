@@ -1,17 +1,14 @@
 <!DOCTYPE html>
+
 <html lang="km">
 
 <head>
+
     <meta charset="UTF-8">
 
     <meta
         name="viewport"
         content="width=device-width, initial-scale=1.0"
-    >
-
-    <meta
-        name="theme-color"
-        content="#2563eb"
     >
 
     <title>
@@ -22,284 +19,265 @@
         rel="stylesheet"
         href="style.css"
     >
+
 </head>
 
 
 <body>
 
-    <main class="app">
 
-        <!-- =========================================
-             Header
-        ========================================== -->
+<div class="container">
 
-        <header class="header">
 
-            <div class="logo">
-                🎬
+    <!-- Header -->
+
+    <div class="hero">
+
+        <div class="flag">
+            🇨🇳 → 🇰🇭
+        </div>
+
+        <h1>
+            Chinese → Khmer
+        </h1>
+
+        <p>
+            AI Video Dubbing
+        </p>
+
+    </div>
+
+
+    <!-- Video -->
+
+    <div class="card">
+
+        <h2>
+            🎬 ជ្រើសរើស Video
+        </h2>
+
+
+        <label
+            class="upload-box"
+            for="videoInput"
+        >
+
+            <div class="upload-icon">
+                📁
             </div>
 
-            <div>
-                <h1>
-                    Chinese → Khmer
-                </h1>
+            <strong>
+                ចុចដើម្បីជ្រើស Video
+            </strong>
 
-                <p>
-                    Video Dubbing
-                </p>
-            </div>
+            <small>
+                MP4, MOV, AVI និង Video ផ្សេងៗ
+            </small>
 
-        </header>
+        </label>
 
 
-        <!-- =========================================
-             Upload Card
-        ========================================== -->
+        <input
+            type="file"
+            id="videoInput"
+            accept="video/*"
+            hidden
+        >
 
-        <section class="card">
 
-            <div class="card-title">
+        <div
+            id="videoInfo"
+            class="video-info"
+        >
 
-                <span>
-                    📹
+            មិនទាន់បានជ្រើស Video
+
+        </div>
+
+
+        <div
+            class="duration"
+            id="duration"
+        ></div>
+
+    </div>
+
+
+    <!-- Translation -->
+
+    <div class="card">
+
+
+        <div class="option-row">
+
+
+            <div class="option-text">
+
+                <span class="option-icon">
+                    🌐
                 </span>
 
                 <div>
-                    <h2>
-                        ជ្រើសរើសវីដេអូ
-                    </h2>
 
-                    <p>
-                        MP4, MOV, MKV, AVI, WEBM
-                    </p>
+                    <strong>
+                        បកប្រែជាភាសាខ្មែរ
+                    </strong>
+
+                    <small>
+                        Chinese → Khmer
+                    </small>
+
                 </div>
 
             </div>
 
 
-            <label
-                for="videoInput"
-                class="upload-box"
-            >
+            <label class="switch">
 
-                <div class="upload-icon">
-                    ⬆️
-                </div>
+                <input
+                    type="checkbox"
+                    id="translateToggle"
+                    checked
+                >
 
-                <strong>
-                    ចុចទីនេះដើម្បីជ្រើសរើសវីដេអូ
-                </strong>
+                <span class="slider"></span>
 
-                <span>
-                    ឬ Drag & Drop វីដេអូមកទីនេះ
-                </span>
+            </label>
+
+        </div>
+
+
+        <!-- Voice -->
+
+        <div class="voice-group">
+
+            <label for="voiceSelect">
+
+                🎙️ សំឡេងខ្មែរ
 
             </label>
 
 
-            <input
-                type="file"
-                id="videoInput"
-                accept="video/mp4,video/quicktime,video/x-matroska,video/x-msvideo,video/webm,.mov,.mp4,.mkv,.avi,.webm"
-                hidden
-            >
+            <select id="voiceSelect">
+
+                <option value="km-KH-PisethNeural">
+
+                    Piseth (ប្រុស)
+
+                </option>
 
 
-            <!-- Video Info -->
+                <option value="km-KH-SreymomNeural">
 
-            <div
-                id="videoInfo"
-                class="video-info"
-            >
-                មិនទាន់បានជ្រើសរើសវីដេអូ
-            </div>
+                    Sreymom (ស្រី)
 
-            <div
-                id="duration"
-                class="file-size"
-            ></div>
+                </option>
+
+            </select>
+
+        </div>
 
 
-            <!-- Translation Option -->
+        <!-- Start -->
 
-            <div class="option-row">
-
-                <div class="option-text">
-
-                    <span class="option-icon">
-                        🌐
-                    </span>
-
-                    <div>
-
-                        <strong>
-                            បកប្រែជាភាសាខ្មែរ
-                        </strong>
-
-                        <small>
-                            Chinese → Khmer
-                        </small>
-
-                    </div>
-
-                </div>
-
-
-                <label class="switch">
-
-                    <input
-                        type="checkbox"
-                        id="translateToggle"
-                        checked
-                    >
-
-                    <span class="slider"></span>
-
-                </label>
-
-            </div>
-
-
-            <!-- Start Button -->
-
-            <button
-                id="startBtn"
-                class="primary-btn"
-                disabled
-            >
-
-                <span>
-                    🎙️
-                </span>
-
-                ចាប់ផ្តើម Dubbing
-
-            </button>
-
-        </section>
-
-
-        <!-- =========================================
-             Progress Card
-        ========================================== -->
-
-        <section
-            id="progressCard"
-            class="card progress-card"
-            style="display:none;"
+        <button
+            id="startBtn"
+            class="primary-btn"
+            disabled
         >
 
-            <div class="section-heading">
+            🎙️
 
-                <div>
-                    <h2>
-                        កំពុងដំណើរការ
-                    </h2>
+            ចាប់ផ្តើម Dubbing
 
-                    <p id="processingStatus">
-                        កំពុងរៀបចំ...
-                    </p>
-                </div>
+        </button>
 
-                <strong id="percentage">
-                    0%
-                </strong>
-
-            </div>
+    </div>
 
 
-            <div class="progress-bar">
+    <!-- Progress -->
 
-                <div
-                    id="progressFill"
-                    class="progress-fill"
-                    style="width:0%;"
-                ></div>
+    <div
+        id="progressCard"
+        class="card hidden"
+    >
 
-            </div>
-
-
-            <p
-                id="progressText"
-                class="progress-text"
-            >
-                កំពុងរៀបចំ...
-            </p>
-
-        </section>
+        <h2>
+            ⚙️ កំពុងដំណើរការ
+        </h2>
 
 
-        <!-- =========================================
-             Results Card
-        ========================================== -->
-
-        <section
-            id="resultsCard"
-            class="card results-card"
-            style="display:none;"
-        >
-
-            <div class="section-heading">
-
-                <div>
-
-                    <h2>
-                        🎉 លទ្ធផល
-                    </h2>
-
-                    <p>
-                        សំឡេង និងការបកប្រែ
-                    </p>
-
-                </div>
-
-            </div>
-
+        <div class="progress">
 
             <div
-                id="partsList"
-                class="parts-list"
+                id="progressFill"
+                class="progress-fill"
             ></div>
 
-
-            <button
-                id="saveBtn"
-                class="secondary-btn"
-            >
-
-                💾
-                រក្សាទុកអត្ថបទខ្មែរ
-
-            </button>
-
-        </section>
+        </div>
 
 
-        <!-- =========================================
-             Footer
-        ========================================== -->
-
-        <footer>
-
-            <p>
-                Chinese → Khmer Video Dubbing
-            </p>
-
-            <p class="footer-small">
-                Powered by Whisper + Translation + TTS
-            </p>
-
-        </footer>
-
-    </main>
+        <div
+            id="percentage"
+            class="percentage"
+        >
+            0%
+        </div>
 
 
-    <!-- JavaScript -->
+        <div
+            id="progressText"
+            class="progress-text"
+        >
+            កំពុងរៀបចំ...
+        </div>
 
-    <script
-        src="script.js"
-        defer
-    ></script>
+
+        <div
+            id="processingStatus"
+            class="processing-status"
+        ></div>
+
+    </div>
+
+
+    <!-- Results -->
+
+    <div
+        id="resultsCard"
+        class="card hidden"
+    >
+
+        <h2>
+            ✅ Dubbing រួចរាល់
+        </h2>
+
+
+        <div
+            id="partsList"
+            class="parts-list"
+        ></div>
+
+
+        <a
+            id="saveBtn"
+            class="save-btn"
+            target="_blank"
+            rel="noopener"
+        >
+
+            🎬 មើល Video Khmer
+
+        </a>
+
+    </div>
+
+
+</div>
+
+
+<script src="script.js"></script>
+
 
 </body>
 
