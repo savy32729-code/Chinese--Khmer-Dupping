@@ -747,7 +747,7 @@ async def transcribe_video(filename: str):
                 }
             )
 
-        model = get_whisper_model()
+        model = await get_whisper_model()
 
         segments, info = model.transcribe(
             str(video_path),
