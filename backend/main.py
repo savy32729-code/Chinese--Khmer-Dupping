@@ -3,6 +3,7 @@ import shutil
 import subprocess
 import uuid
 import asyncio
+import time
 from pathlib import Path
 from typing import Any
 
@@ -20,7 +21,7 @@ from pydantic import BaseModel, Field
 # APP
 # =========================================================
 
-APP_VERSION = "3.0.0"
+APP_VERSION = "3.1.0"
 
 app = FastAPI(
     title="Chinese-Khmer Dubbing API",
@@ -206,13 +207,13 @@ def split_text(
 
     # Khmer/Chinese punctuation
     separators = [
-        "។",
-        "៕",
+        "á",
+        "á",
         "!",
         "?",
-        "！",
-        "？",
-        "，",
+        "ï¼",
+        "ï¼",
+        "ï¼",
         ",",
         " ",
     ]
@@ -694,8 +695,13 @@ async def upload_video(
                 if not chunk:
                     break
 
-                buffer.write(chunk)
                 total_bytes += len(chunk)
+                if total_bytes > MAX_UPLOAD_BYTES:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"Video is too large. Maximum size is {MAX_UPLOAD_BYTES // (1024 * 1024)} MB",
+                    )
+                buffer.write(chunk)
 
         await file.close()
 
@@ -796,47 +802,78 @@ async def transcribe_video(filename: str):
 # =========================================================
 # TRANSLATE
 # =========================================================
-from pydantic import BaseModel
-from typing import List
-
-
-class Segment(BaseModel):
-    start: float
-    end: float
-    text: str
-
 
 class TranslateRequest(BaseModel):
-    text: str = Field(..., min_length=1)
+    text: str | None = None
     source: str = "zh"
     target: str = "km"
+    segments: list[TranslateSegment] | None = None
 
 
 @app.post("/translate")
 async def translate(data: TranslateRequest):
     try:
+        if data.segments:
+            translator = GoogleTranslator(
+                source=data.source,
+                target=data.target,
+            )
+            output = []
+            for segment in data.segments:
+                text = segment.text.strip()
+                if not text:
+                    continue
+                translated = await asyncio.to_thread(
+                    translator.translate,
+                    text,
+                )
+                output.append({
+                    "start": float(segment.start),
+                    "end": float(segment.end),
+                    "text": text,
+                    "translation": translated or text,
+                })
+            return {
+                "status": "success",
+                "source": data.source,
+                "target": data.target,
+                "segments": output,
+            }
+
+        text = (data.text or "").strip()
+        if not text:
+            raise HTTPException(
+                status_code=422,
+                detail="text or segments is required",
+            )
+
         translator = GoogleTranslator(
             source=data.source,
-            target=data.target
+            target=data.target,
         )
-
-        result = translator.translate(data.text)
+        result = await asyncio.to_thread(
+            translator.translate,
+            text,
+        )
 
         return {
             "status": "success",
-            "original": data.text,
-            "translation": result,
+            "original": text,
+            "translation": result or text,
             "source": data.source,
-            "target": data.target
+            "target": data.target,
         }
 
+    except HTTPException:
+        raise
     except Exception as exc:
         print(f"TRANSLATION ERROR: {type(exc).__name__}: {exc}")
-
         raise HTTPException(
             status_code=500,
-            detail=f"Translation failed: {type(exc).__name__}: {exc}"
-        )
+            detail=f"Translation failed: {type(exc).__name__}: {exc}",
+        ) from exc
+
+
 # =========================================================
 # TTS
 # =========================================================
