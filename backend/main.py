@@ -790,71 +790,65 @@ async def transcribe_video(filename: str):
 # =========================================================
 # TRANSLATE
 # =========================================================
+from pydantic import BaseModel
+from typing import List
+
+
+class Segment(BaseModel):
+    start: float
+    end: float
+    text: str
+
+
+class TranslateRequest(BaseModel):
+    segments: List[Segment]
+
 
 @app.post("/translate")
-async def translate(
-    data: TranslateRequest,
-):
-
-    text = data.text.strip()
-
-    if not text:
-        raise HTTPException(
-            status_code=400,
-            detail="Text cannot be empty",
-        )
-
+async def translate_segments(request: TranslateRequest):
     try:
-
-        chunks = split_text(
-            text,
-            max_chars=3000,
+        translator = GoogleTranslator(
+            source="zh",
+            target="km"
         )
 
-        translated_parts = []
+        translated_segments = []
 
-        for chunk in chunks:
+        for segment in request.segments:
+            text = segment.text.strip()
 
-            result = await asyncio.to_thread(
-                GoogleTranslator(
-                    source=data.source or "auto",
-                    target=data.target or "km",
-                ).translate,
-                chunk,
-            )
+            if not text:
+                continue
 
-            if result:
-                translated_parts.append(
-                    result.strip()
+            try:
+                translated_text = translator.translate(text)
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Translation failed: {type(exc).__name__}: {exc}"
                 )
 
-        translated = " ".join(
-            translated_parts
-        )
+            translated_segments.append({
+                "start": segment.start,
+                "end": segment.end,
+                "text": text,
+                "translation": translated_text
+            })
 
         return {
-            "success": True,
-            "original": text,
-            "translation": translated,
-            "source": data.source,
-            "target": data.target,
+            "status": "success",
+            "language": "km",
+            "segments": translated_segments
         }
 
+    except HTTPException:
+        raise
+
     except Exception as exc:
-
-        print(
-            f"TRANSLATION ERROR: {exc}"
-        )
-
         raise HTTPException(
             status_code=500,
-            detail=(
-                "Translation failed: "
-                f"{str(exc)}"
-            ),
-        ) from exc
-
-
+            detail=f"Translation failed: {type(exc).__name__}: {exc}"
+        )
 # =========================================================
 # TTS
 # =========================================================
