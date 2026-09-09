@@ -306,10 +306,12 @@ async def transcribe_video(filename: str):
         whisper_model = get_whisper_model()
 
         segments, info = whisper_model.transcribe(
-            str(video_file),
-            language="zh",
-            beam_size=1,
-        )
+    str(video_file),
+    language="zh",
+    beam_size=1,
+    vad_filter=True,
+    condition_on_previous_text=False,
+)
 
         transcript = []
         full_text_parts = []
