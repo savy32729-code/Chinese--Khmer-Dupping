@@ -255,64 +255,49 @@ async def generate_tts_with_retry(
     voice: str,
     retries: int = 3,
 ):
+    """
+    TTS with automatic fallback.
 
-    last_error = None
+    1. Try Edge TTS
+    2. If Edge TTS fails (403/503/network/etc.)
+       automatically use Google TTS
+    """
+
+    text = text.strip()
+
+    if not text:
+        raise RuntimeError("TTS text is empty")
 
     chunks = split_text(
         text,
-        max_chars=2500,
+        max_chars=1800,
     )
 
     if not chunks:
-        raise RuntimeError(
-            "TTS text is empty"
-        )
+        raise RuntimeError("No text for TTS")
 
-    # Single chunk
-    if len(chunks) == 1:
-
-        for attempt in range(retries):
-
-            try:
-
-                communicate = edge_tts.Communicate(
-                    chunks[0],
-                    voice,
-                )
-
-                await communicate.save(
-                    str(output_file)
-                )
-
-                if (
-                    output_file.exists()
-                    and output_file.stat().st_size > 0
-                ):
-                    return
-
-            except Exception as exc:
-                last_error = exc
-
-                if attempt < retries - 1:
-                    await asyncio.sleep(
-                        2 ** attempt
-                    )
-
-        raise RuntimeError(
-            f"TTS failed: {last_error}"
-        )
-
-    # Multiple chunks
-    chunk_files = []
+    # =====================================================
+    # 1. TRY EDGE TTS
+    # =====================================================
 
     try:
+
+        print(
+            f"TTS: trying Edge TTS "
+            f"({len(chunks)} chunk(s))"
+        )
+
+        chunk_files = []
 
         for index, chunk in enumerate(chunks):
 
             chunk_file = (
                 output_file.parent
-                / f"{output_file.stem}_part_{index}.mp3"
+                / f"{output_file.stem}_edge_{index}.mp3"
             )
+
+            success = False
+            last_error = None
 
             for attempt in range(retries):
 
@@ -331,108 +316,287 @@ async def generate_tts_with_retry(
                         chunk_file.exists()
                         and chunk_file.stat().st_size > 0
                     ):
+                        success = True
                         break
 
                 except Exception as exc:
+
                     last_error = exc
+
+                    print(
+                        f"Edge TTS attempt "
+                        f"{attempt + 1}/{retries} "
+                        f"failed: {exc}"
+                    )
 
                     if attempt < retries - 1:
                         await asyncio.sleep(
                             2 ** attempt
                         )
 
-            if not chunk_file.exists():
+            if not success:
                 raise RuntimeError(
-                    f"TTS chunk failed: {last_error}"
+                    f"Edge TTS failed: {last_error}"
                 )
 
-            chunk_files.append(chunk_file)
+            chunk_files.append(
+                chunk_file
+            )
 
-        concat_file = (
-            output_file.parent
-            / f"{output_file.stem}_concat.txt"
-        )
+        # ---------------------------------------------
+        # Merge Edge chunks
+        # ---------------------------------------------
 
-        with concat_file.open(
-            "w",
-            encoding="utf-8",
-        ) as f:
+        if len(chunk_files) == 1:
 
-            for chunk_file in chunk_files:
+            shutil.copyfile(
+                chunk_files[0],
+                output_file,
+            )
 
-                escaped = str(
-                    chunk_file
-                ).replace(
-                    "'",
-                    "'\\''",
-                )
+        else:
 
-                f.write(
-                    f"file '{escaped}'\n"
-                )
+            concat_file = (
+                output_file.parent
+                / f"{output_file.stem}_edge_concat.txt"
+            )
 
-        run_command(
-            [
-                "ffmpeg",
-                "-y",
-                "-f",
-                "concat",
-                "-safe",
-                "0",
-                "-i",
-                str(concat_file),
-                "-c:a",
-                "libmp3lame",
-                "-b:a",
-                "128k",
-                str(output_file),
-            ],
-            timeout=300,
-        )
+            with concat_file.open(
+                "w",
+                encoding="utf-8",
+            ) as f:
 
-    finally:
+                for file in chunk_files:
+
+                    f.write(
+                        "file '"
+                        + str(file).replace(
+                            "'",
+                            "'\\''",
+                        )
+                        + "'\n"
+                    )
+
+            run_command(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-f",
+                    "concat",
+                    "-safe",
+                    "0",
+                    "-i",
+                    str(concat_file),
+                    "-c:a",
+                    "libmp3lame",
+                    "-b:a",
+                    "128k",
+                    str(output_file),
+                ],
+                timeout=300,
+            )
+
+            concat_file.unlink(
+                missing_ok=True
+            )
+
+        # Cleanup Edge chunks
 
         for file in chunk_files:
             file.unlink(
                 missing_ok=True
             )
 
+        if (
+            output_file.exists()
+            and output_file.stat().st_size > 0
+        ):
+            print(
+                "TTS: Edge TTS succeeded"
+            )
+            return
 
-def cleanup_old_files(
-    max_age_seconds: int = 3600,
-):
+    except Exception as edge_error:
 
-    import time
+        print(
+            "TTS: Edge TTS unavailable. "
+            f"Using Google TTS fallback. "
+            f"Error: {edge_error}"
+        )
 
-    now = time.time()
+        # Cleanup partial Edge files
 
-    for directory in (
-        UPLOAD_DIR,
-        AUDIO_DIR,
-        OUTPUT_DIR,
-    ):
+        for file in output_file.parent.glob(
+            f"{output_file.stem}_edge_*"
+        ):
+            file.unlink(
+                missing_ok=True
+            )
 
-        for file in directory.iterdir():
+        output_file.unlink(
+            missing_ok=True
+        )
 
-            try:
+    # =====================================================
+    # 2. GOOGLE TTS FALLBACK
+    # =====================================================
 
-                if not file.is_file():
-                    continue
+    try:
 
-                age = (
-                    now
-                    - file.stat().st_mtime
-                )
+        from gtts import gTTS
 
-                if age > max_age_seconds:
-                    file.unlink(
-                        missing_ok=True
+        print(
+            f"TTS: using Google TTS fallback "
+            f"({len(chunks)} chunk(s))"
+        )
+
+        chunk_files = []
+
+        for index, chunk in enumerate(chunks):
+
+            chunk_file = (
+                output_file.parent
+                / f"{output_file.stem}_google_{index}.mp3"
+            )
+
+            last_error = None
+
+            for attempt in range(retries):
+
+                try:
+
+                    tts = gTTS(
+                        text=chunk,
+                        lang="km",
+                        slow=False,
                     )
 
-            except Exception as exc:
-                print(
-                    f"Cleanup warning: {exc}"
+                    await asyncio.to_thread(
+                        tts.save,
+                        str(chunk_file),
+                    )
+
+                    if (
+                        chunk_file.exists()
+                        and chunk_file.stat().st_size > 0
+                    ):
+                        break
+
+                except Exception as exc:
+
+                    last_error = exc
+
+                    print(
+                        f"Google TTS attempt "
+                        f"{attempt + 1}/{retries} "
+                        f"failed: {exc}"
+                    )
+
+                    if attempt < retries - 1:
+                        await asyncio.sleep(
+                            2 ** attempt
+                        )
+
+            if not (
+                chunk_file.exists()
+                and chunk_file.stat().st_size > 0
+            ):
+                raise RuntimeError(
+                    f"Google TTS failed: "
+                    f"{last_error}"
                 )
+
+            chunk_files.append(
+                chunk_file
+            )
+
+        # ---------------------------------------------
+        # Merge Google chunks
+        # ---------------------------------------------
+
+        if len(chunk_files) == 1:
+
+            shutil.copyfile(
+                chunk_files[0],
+                output_file,
+            )
+
+        else:
+
+            concat_file = (
+                output_file.parent
+                / f"{output_file.stem}_google_concat.txt"
+            )
+
+            with concat_file.open(
+                "w",
+                encoding="utf-8",
+            ) as f:
+
+                for file in chunk_files:
+
+                    f.write(
+                        "file '"
+                        + str(file).replace(
+                            "'",
+                            "'\\''",
+                        )
+                        + "'\n"
+                    )
+
+            run_command(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-f",
+                    "concat",
+                    "-safe",
+                    "0",
+                    "-i",
+                    str(concat_file),
+                    "-c:a",
+                    "libmp3lame",
+                    "-b:a",
+                    "128k",
+                    str(output_file),
+                ],
+                timeout=300,
+            )
+
+            concat_file.unlink(
+                missing_ok=True
+            )
+
+        # Cleanup
+
+        for file in chunk_files:
+            file.unlink(
+                missing_ok=True
+            )
+
+        if (
+            output_file.exists()
+            and output_file.stat().st_size > 0
+        ):
+            print(
+                "TTS: Google TTS fallback succeeded"
+            )
+            return
+
+        raise RuntimeError(
+            "Google TTS produced empty audio"
+        )
+
+    except Exception as google_error:
+
+        output_file.unlink(
+            missing_ok=True
+        )
+
+        raise RuntimeError(
+            "All TTS providers failed. "
+            f"Google TTS error: {google_error}"
+        ) from google_error
 
 
 # =========================================================
