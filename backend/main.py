@@ -807,115 +807,35 @@ class Segment(BaseModel):
 
 
 class TranslateRequest(BaseModel):
-    segments: List[Segment]
+    text: str = Field(..., min_length=1)
+    source: str = "zh"
+    target: str = "km"
 
 
 @app.post("/translate")
 async def translate(data: TranslateRequest):
-
     try:
         translator = GoogleTranslator(
-            source=data.source or "zh",
-            target=data.target or "km",
+            source=data.source,
+            target=data.target
         )
 
-        # -----------------------------------------
-        # Mode 1: Translate segments
-        # -----------------------------------------
-        if data.segments:
+        result = translator.translate(data.text)
 
-            translated_segments = []
-
-            for segment in data.segments:
-
-                text = segment.text.strip()
-
-                if not text:
-                    continue
-
-                result = await asyncio.to_thread(
-                    translator.translate,
-                    text,
-                )
-
-                translated_segments.append({
-                    "start": segment.start,
-                    "end": segment.end,
-                    "text": text,
-                    "translation": result or "",
-                })
-
-            return {
-                "success": True,
-                "source": data.source,
-                "target": data.target,
-                "segments": translated_segments,
-            }
-
-        # -----------------------------------------
-        # Mode 2: Translate single text
-        # -----------------------------------------
-        if data.text:
-
-            text = data.text.strip()
-
-            if not text:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Text cannot be empty",
-                )
-
-            chunks = split_text(
-                text,
-                max_chars=3000,
-            )
-
-            translated_parts = []
-
-            for chunk in chunks:
-
-                result = await asyncio.to_thread(
-                    translator.translate,
-                    chunk,
-                )
-
-                if result:
-                    translated_parts.append(
-                        result.strip()
-                    )
-
-            return {
-                "success": True,
-                "original": text,
-                "translation": " ".join(
-                    translated_parts
-                ),
-                "source": data.source,
-                "target": data.target,
-            }
-
-        raise HTTPException(
-            status_code=400,
-            detail="Provide either 'text' or 'segments'",
-        )
-
-    except HTTPException:
-        raise
+        return {
+            "status": "success",
+            "original": data.text,
+            "translation": result,
+            "source": data.source,
+            "target": data.target
+        }
 
     except Exception as exc:
-
-        print(
-            f"TRANSLATION ERROR: "
-            f"{type(exc).__name__}: {exc}"
-        )
+        print(f"TRANSLATION ERROR: {type(exc).__name__}: {exc}")
 
         raise HTTPException(
             status_code=500,
-            detail=(
-                "Translation failed: "
-                f"{type(exc).__name__}: {exc}"
-            ),
-        ) from exc
+            detail=f"Translation failed: {type(exc).__name__}: {exc}"
         )
 # =========================================================
 # TTS
