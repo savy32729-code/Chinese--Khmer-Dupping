@@ -29,20 +29,20 @@ videoInput.addEventListener("change", () => {
     selectedFile = videoInput.files[0];
 
     if (!selectedFile) {
-        videoInfo.textContent = "មិនទាន់បានជ្រើស Video";
+        videoInfo.textContent = "áá·ááá¶áááá¶ááááá¾á Video";
         duration.textContent = "";
         startBtn.disabled = true;
         return;
     }
 
     videoInfo.textContent =
-        `📹 ${selectedFile.name}`;
+        `ð¹ ${selectedFile.name}`;
 
     const sizeMB =
         (selectedFile.size / 1024 / 1024).toFixed(2);
 
     duration.textContent =
-        `ទំហំ: ${sizeMB} MB`;
+        `ááá á: ${sizeMB} MB`;
 
     startBtn.disabled = false;
 
@@ -73,7 +73,7 @@ function setProgress(value, text) {
 startBtn.addEventListener("click", async () => {
 
     if (!selectedFile) {
-        alert("សូមជ្រើស Video ជាមុនសិន");
+        alert("áá¼ááááá¾á Video áá¶áá»ááá·á");
         return;
     }
 
@@ -84,7 +84,7 @@ startBtn.addEventListener("click", async () => {
 
     setProgress(
         5,
-        "កំពុង Upload Video..."
+        "áááá»á Upload Video..."
     );
 
     try {
@@ -110,9 +110,8 @@ startBtn.addEventListener("click", async () => {
             );
 
         if (!uploadResponse.ok) {
-            throw new Error(
-                "Upload Video បរាជ័យ"
-            );
+            const errorText = await uploadResponse.text();
+            throw new Error(`Upload Video ááá¶ááá: ${errorText}`);
         }
 
         const uploadData =
@@ -120,7 +119,7 @@ startBtn.addEventListener("click", async () => {
 
         setProgress(
             20,
-            "Upload បានជោគជ័យ..."
+            "Upload áá¶ááááááá..."
         );
 
 
@@ -134,7 +133,7 @@ startBtn.addEventListener("click", async () => {
 
         setProgress(
             30,
-            "កំពុងស្តាប់សំឡេងក្នុង Video..."
+            "áááá»ááááá¶ááááá¡áááááá»á Video..."
         );
 
         const transcribeResponse =
@@ -146,9 +145,8 @@ startBtn.addEventListener("click", async () => {
             );
 
         if (!transcribeResponse.ok) {
-            throw new Error(
-                "Transcribe បរាជ័យ"
-            );
+            const errorText = await transcribeResponse.text();
+            throw new Error(`Transcribe ááá¶ááá: ${errorText}`);
         }
 
         const transcribeData =
@@ -159,7 +157,7 @@ startBtn.addEventListener("click", async () => {
 
         if (!segments.length) {
             throw new Error(
-                "រកមិនឃើញសំឡេងក្នុង Video"
+                "áááá·ááá¾áááá¡áááááá»á Video"
             );
         }
 
@@ -172,74 +170,53 @@ startBtn.addEventListener("click", async () => {
 
             setProgress(
                 45,
-                "កំពុងបកប្រែ Chinese → Khmer..."
+                `áááá»ááááááá ${segments.length} áááááá...`
             );
 
-            for (
-                let i = 0;
-                i < segments.length;
-                i++
-            ) {
-
-                const segment =
-                    segments[i];
-
-                const translateResponse =
-                    await fetch(
-                        `${API_URL}/translate`,
-                        {
-                            method: "POST",
-
-                            headers: {
-                                "Content-Type":
-                                    "application/json"
-                            },
-
-                            body: JSON.stringify({
-                                text:
-                                    segment.text || ""
-                            })
-                        }
-                    );
-
-                if (!translateResponse.ok) {
-                    throw new Error(
-                        "Translation បរាជ័យ"
-                    );
+            const translateResponse = await fetch(
+                `${API_URL}/translate`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        source: "zh",
+                        target: "km",
+                        segments: segments.map(s => ({
+                            start: Number(s.start) || 0,
+                            end: Number(s.end) || 0,
+                            text: s.text || ""
+                        }))
+                    })
                 }
+            );
 
-                const translateData =
-                    await translateResponse.json();
-
-                segment.translation =
-                    translateData.translation ||
-                    segment.text ||
-                    "";
-
-                const progress =
-                    45 +
-                    Math.round(
-                        ((i + 1) /
-                            segments.length) *
-                        25
-                    );
-
-                setProgress(
-                    progress,
-                    `កំពុងបកប្រែ ${i + 1}/${segments.length}...`
+            if (!translateResponse.ok) {
+                const errorText = await translateResponse.text();
+                throw new Error(
+                    `Translation ááá¶ááá: ${errorText}`
                 );
             }
 
+            const translateData = await translateResponse.json();
+            const translated = translateData.segments || [];
+
+            if (!translated.length) {
+                throw new Error("áá·áá¢á¶ááááááááá¶á");
+            }
+
+            segments = translated;
+            setProgress(
+                70,
+                `áááááááá½ááá¶áá ${translated.length} áááááá`
+            );
+
         } else {
 
-            segments.forEach(
-                segment => {
-
-                    segment.translation =
-                        segment.text || "";
-
-                }
-            );
+            segments.forEach(segment => {
+                segment.translation = segment.text || "";
+            });
 
         }
 
@@ -250,11 +227,11 @@ startBtn.addEventListener("click", async () => {
 
         setProgress(
             75,
-            "កំពុងបង្កើតសំឡេងខ្មែរ..."
+            "áááá»áááááá¾áááá¡ááááááá..."
         );
 
         processingStatus.textContent =
-            `🎙️ សំឡេង: ${voiceSelect.value}`;
+            `ðï¸ ááá¡áá: ${voiceSelect.value}`;
 
 
         const dubbingResponse =
@@ -289,7 +266,7 @@ startBtn.addEventListener("click", async () => {
                 await dubbingResponse.text();
 
             throw new Error(
-                `Dubbing បរាជ័យ: ${errorText}`
+                `Dubbing ááá¶ááá: ${errorText}`
             );
 
         }
@@ -301,7 +278,7 @@ startBtn.addEventListener("click", async () => {
 
         setProgress(
             95,
-            "កំពុងរៀបចំ Video ចុងក្រោយ..."
+            "áááá»áááááá Video áá»áááááá..."
         );
 
 
@@ -319,7 +296,7 @@ startBtn.addEventListener("click", async () => {
 
         setProgress(
             100,
-            "រួចរាល់! 🎉"
+            "áá½ááá¶áá! ð"
         );
 
 
@@ -336,7 +313,7 @@ startBtn.addEventListener("click", async () => {
             "result-item";
 
         resultInfo.textContent =
-            "✅ Video Khmer ត្រូវបានបង្កើតរួចរាល់";
+            "â Video Khmer áááá¼ááá¶áááááá¾ááá½ááá¶áá";
 
         partsList.appendChild(
             resultInfo
@@ -354,11 +331,11 @@ startBtn.addEventListener("click", async () => {
 
         alert(
             error.message ||
-            "មានបញ្ហា សូមព្យាយាមម្តងទៀត"
+            "áá¶ááááá á¶ áá¼ááááá¶áá¶áááááááá"
         );
 
         progressText.textContent =
-            "❌ មានបញ្ហា";
+            "â áá¶ááááá á¶";
 
         processingStatus.textContent =
             error.message || "";
