@@ -728,22 +728,26 @@ async def upload_video(
 
 @app.post("/transcribe")
 async def transcribe_video(filename: str):
-    video_path = UPLOAD_DIR / filename
-
     try:
-        print(f"TRANSCRIBE START: {video_path}")
+        video_path = UPLOAD_DIR / Path(filename).name
+
+        print(f"TRANSCRIBE FILE: {video_path}")
 
         if not video_path.exists():
+            files = [
+                f.name for f in UPLOAD_DIR.iterdir()
+                if f.is_file()
+            ]
+
             raise HTTPException(
                 status_code=404,
-                detail=f"Video not found: {filename}"
+                detail={
+                    "message": f"Video not found: {filename}",
+                    "available_files": files
+                }
             )
 
-        print(f"FILE SIZE: {video_path.stat().st_size} bytes")
-
         model = get_whisper_model()
-
-        print("WHISPER MODEL LOADED")
 
         segments, info = model.transcribe(
             str(video_path),
@@ -765,8 +769,6 @@ async def transcribe_video(filename: str):
                     "text": text
                 })
 
-        print(f"TRANSCRIBE DONE: {len(results)} segments")
-
         return {
             "status": "success",
             "filename": filename,
@@ -778,18 +780,12 @@ async def transcribe_video(filename: str):
         raise
 
     except Exception as exc:
-        print(
-            f"TRANSCRIBE ERROR: "
-            f"{type(exc).__name__}: {exc}"
-        )
+        print(f"TRANSCRIBE ERROR: {type(exc).__name__}: {exc}")
 
         raise HTTPException(
             status_code=500,
-            detail=(
-                f"Transcription failed: "
-                f"{type(exc).__name__}: {exc}"
-            )
-        ) from exc
+            detail=f"Transcription failed: {type(exc).__name__}: {exc}"
+        )
 
 # =========================================================
 # TRANSLATE
