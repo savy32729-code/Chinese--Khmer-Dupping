@@ -292,113 +292,54 @@ async def upload_video(
 # =========================================================
 
 @app.post("/transcribe")
-
-async def transcribe_video(
-
-    filename: str
-
-):
-
-    safe_filename = Path(
-
-        filename
-
-    ).name
-
-    video_file = (
-
-        UPLOAD_DIR /
-
-        safe_filename
-
-    )
+async def transcribe_video(filename: str):
+    safe_filename = Path(filename).name
+    video_file = UPLOAD_DIR / safe_filename
 
     if not video_file.exists():
-
         raise HTTPException(
-
             status_code=404,
-
-            detail="Video file not found",
-
+            detail="Video file not found"
         )
 
     try:
-
         whisper_model = get_whisper_model()
 
-segments, info = whisper_model.transcribe(
-    str(video_file),
-    language="zh",
-    beam_size=1,
-)
-
-        transcript = []
-
-        for segment in segments:
-
-            text = segment.text.strip()
-
-            if not text:
-
-                continue
-
-            transcript.append(
-
-                {
-
-                    "start": round(
-
-                        segment.start,
-
-                        2,
-
-                    ),
-
-                    "end": round(
-
-                        segment.end,
-
-                        2,
-
-                    ),
-
-                    "text": text,
-
-                }
-
-            )
-
-        full_text = " ".join(
-
-            item["text"]
-
-            for item in transcript
-
+        segments, info = whisper_model.transcribe(
+            str(video_file),
+            language="zh",
+            beam_size=1,
         )
 
+        transcript = []
+        full_text_parts = []
+
+        for segment in segments:
+            text = segment.text.strip()
+
+            if text:
+                full_text_parts.append(text)
+
+                transcript.append({
+                    "start": segment.start,
+                    "end": segment.end,
+                    "text": text,
+                })
+
+        full_text = " ".join(full_text_parts)
+
         return {
-
             "status": "transcribed",
-
             "filename": video_file.name,
-
             "language": info.language,
-
             "text": full_text,
-
             "segments": transcript,
-
         }
 
     except Exception as exc:
-
         raise HTTPException(
-
             status_code=500,
-
             detail=f"Transcription failed: {exc}",
-
         ) from exc
 
 # =========================================================
