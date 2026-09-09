@@ -124,11 +124,17 @@ async def get_whisper_model():
 # REQUEST MODELS
 # =========================================================
 
-class TranslateRequest(BaseModel):
-    text: str = Field(..., min_length=1)
-    source: str = "auto"
-    target: str = "km"
+class TranslateSegment(BaseModel):
+    start: float
+    end: float
+    text: str
 
+
+class TranslateRequest(BaseModel):
+    text: str | None = None
+    source: str = "zh"
+    target: str = "km"
+    segments: list[TranslateSegment] | None = None
 
 class TTSRequest(BaseModel):
     text: str = Field(..., min_length=1)
@@ -805,49 +811,111 @@ class TranslateRequest(BaseModel):
 
 
 @app.post("/translate")
-async def translate_segments(request: TranslateRequest):
+async def translate(data: TranslateRequest):
+
     try:
         translator = GoogleTranslator(
-            source="zh",
-            target="km"
+            source=data.source or "zh",
+            target=data.target or "km",
         )
 
-        translated_segments = []
+        # -----------------------------------------
+        # Mode 1: Translate segments
+        # -----------------------------------------
+        if data.segments:
 
-        for segment in request.segments:
-            text = segment.text.strip()
+            translated_segments = []
 
-            if not text:
-                continue
+            for segment in data.segments:
 
-            try:
-                translated_text = translator.translate(text)
-            except Exception as exc:
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Translation failed: {type(exc).__name__}: {exc}"
+                text = segment.text.strip()
+
+                if not text:
+                    continue
+
+                result = await asyncio.to_thread(
+                    translator.translate,
+                    text,
                 )
 
-            translated_segments.append({
-                "start": segment.start,
-                "end": segment.end,
-                "text": text,
-                "translation": translated_text
-            })
+                translated_segments.append({
+                    "start": segment.start,
+                    "end": segment.end,
+                    "text": text,
+                    "translation": result or "",
+                })
 
-        return {
-            "status": "success",
-            "language": "km",
-            "segments": translated_segments
-        }
+            return {
+                "success": True,
+                "source": data.source,
+                "target": data.target,
+                "segments": translated_segments,
+            }
+
+        # -----------------------------------------
+        # Mode 2: Translate single text
+        # -----------------------------------------
+        if data.text:
+
+            text = data.text.strip()
+
+            if not text:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Text cannot be empty",
+                )
+
+            chunks = split_text(
+                text,
+                max_chars=3000,
+            )
+
+            translated_parts = []
+
+            for chunk in chunks:
+
+                result = await asyncio.to_thread(
+                    translator.translate,
+                    chunk,
+                )
+
+                if result:
+                    translated_parts.append(
+                        result.strip()
+                    )
+
+            return {
+                "success": True,
+                "original": text,
+                "translation": " ".join(
+                    translated_parts
+                ),
+                "source": data.source,
+                "target": data.target,
+            }
+
+        raise HTTPException(
+            status_code=400,
+            detail="Provide either 'text' or 'segments'",
+        )
 
     except HTTPException:
         raise
 
     except Exception as exc:
+
+        print(
+            f"TRANSLATION ERROR: "
+            f"{type(exc).__name__}: {exc}"
+        )
+
         raise HTTPException(
             status_code=500,
-            detail=f"Translation failed: {type(exc).__name__}: {exc}"
+            detail=(
+                "Translation failed: "
+                f"{type(exc).__name__}: {exc}"
+            ),
+        ) from exc
         )
 # =========================================================
 # TTS
