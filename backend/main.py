@@ -628,7 +628,25 @@ def health():
         "version": APP_VERSION,
     }
 
+def cleanup_old_files(max_age_seconds=3600):
+    now = time.time()
 
+    for folder in [UPLOAD_DIR, AUDIO_DIR, OUTPUT_DIR]:
+        if not os.path.exists(folder):
+            continue
+
+        for name in os.listdir(folder):
+            path = os.path.join(folder, name)
+
+            try:
+                if os.path.isfile(path):
+                    age = now - os.path.getmtime(path)
+
+                    if age > max_age_seconds:
+                        os.remove(path)
+
+            except Exception as e:
+                print(f"Cleanup warning: {path} -> {e}")
 # =========================================================
 # UPLOAD
 # =========================================================
