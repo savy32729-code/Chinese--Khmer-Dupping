@@ -94,15 +94,24 @@ ALLOWED_VIDEO_EXTENSIONS = {
 
 # =========================================================
 
-model = WhisperModel(
+from faster_whisper import WhisperModel
 
-    "tiny",
+model = None
 
-    device="cpu",
 
-    compute_type="int8",
+def get_whisper_model():
+    global model
 
-)
+    if model is None:
+        print("Loading Whisper model...")
+        model = WhisperModel(
+            "tiny",
+            device="cpu",
+            compute_type="int8",
+        )
+        print("Whisper model loaded.")
+
+    return model
 
 # =========================================================
 
@@ -316,15 +325,13 @@ async def transcribe_video(
 
     try:
 
-        segments, info = model.transcribe(
+        whisper_model = get_whisper_model()
 
-            str(video_file),
-
-            language="zh",
-
-            beam_size=5,
-
-        )
+segments, info = whisper_model.transcribe(
+    str(video_file),
+    language="zh",
+    beam_size=1,
+)
 
         transcript = []
 
