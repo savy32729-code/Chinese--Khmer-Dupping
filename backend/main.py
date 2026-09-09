@@ -1,599 +1,1038 @@
 import os
-
 import shutil
-
-import uuid
-
 import subprocess
-
+import uuid
+import asyncio
 from pathlib import Path
-
-from deep_translator import GoogleTranslator
-
-from fastapi import FastAPI, HTTPException, File, UploadFile
-
-from fastapi.middleware.cors import CORSMiddleware
-
-from fastapi.responses import FileResponse
-
-from faster_whisper import WhisperModel
+from typing import Any
 
 import edge_tts
+from deep_translator import GoogleTranslator
+from faster_whisper import WhisperModel
 
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException, File, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
 
-app = FastAPI(
-
-    title="Chinese-Khmer Dubbing API",
-
-    version="2.0.0",
-
-)
 
 # =========================================================
+# APP
+# =========================================================
 
+APP_VERSION = "3.0.0"
+
+app = FastAPI(
+    title="Chinese-Khmer Dubbing API",
+    version=APP_VERSION,
+)
+
+
+# =========================================================
 # CORS
-
 # =========================================================
 
 app.add_middleware(
-
     CORSMiddleware,
-
     allow_origins=["*"],
-
     allow_credentials=False,
-
     allow_methods=["*"],
-
     allow_headers=["*"],
-
 )
 
-# =========================================================
-
-# Folders
 
 # =========================================================
-
-UPLOAD_DIR = Path("/tmp/uploads")
-
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-
-AUDIO_DIR = Path("/tmp/audio")
-
-AUDIO_DIR.mkdir(parents=True, exist_ok=True)
-
-OUTPUT_DIR = Path("/tmp/output")
-
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-
+# DIRECTORIES
 # =========================================================
 
-# Allowed Video
+BASE_DIR = Path("/tmp")
 
+UPLOAD_DIR = BASE_DIR / "uploads"
+AUDIO_DIR = BASE_DIR / "audio"
+OUTPUT_DIR = BASE_DIR / "output"
+
+for directory in (UPLOAD_DIR, AUDIO_DIR, OUTPUT_DIR):
+    directory.mkdir(parents=True, exist_ok=True)
+
+
+# =========================================================
+# SETTINGS
 # =========================================================
 
 ALLOWED_VIDEO_EXTENSIONS = {
-
     ".mp4",
-
     ".mov",
-
     ".mkv",
-
     ".avi",
-
     ".webm",
-
 }
 
-# =========================================================
+MAX_UPLOAD_BYTES = 500 * 1024 * 1024
 
-# Whisper
+WHISPER_MODEL_NAME = os.getenv(
+    "WHISPER_MODEL",
+    "tiny",
+)
 
-# =========================================================
+WHISPER_DEVICE = os.getenv(
+    "WHISPER_DEVICE",
+    "cpu",
+)
 
-from faster_whisper import WhisperModel
+WHISPER_COMPUTE_TYPE = os.getenv(
+    "WHISPER_COMPUTE_TYPE",
+    "int8",
+)
 
-model = None
+DEFAULT_VOICE = os.getenv(
+    "TTS_VOICE",
+    "km-KH-PisethNeural",
+)
 
-
-def get_whisper_model():
-    global model
-
-    if model is None:
-        print("Loading Whisper model...")
-        model = WhisperModel(
-            "tiny",
-            device="cpu",
-            compute_type="int8",
-        )
-        print("Whisper model loaded.")
-
-    return model
 
 # =========================================================
+# WHISPER
+# =========================================================
 
-# Request Models
+whisper_model = None
+whisper_lock = asyncio.Lock()
 
+
+async def get_whisper_model():
+    global whisper_model
+
+    if whisper_model is None:
+        async with whisper_lock:
+            if whisper_model is None:
+                print(
+                    f"Loading Whisper model: "
+                    f"{WHISPER_MODEL_NAME}"
+                )
+
+                whisper_model = WhisperModel(
+                    WHISPER_MODEL_NAME,
+                    device=WHISPER_DEVICE,
+                    compute_type=WHISPER_COMPUTE_TYPE,
+                )
+
+                print("Whisper model loaded.")
+
+    return whisper_model
+
+
+# =========================================================
+# REQUEST MODELS
 # =========================================================
 
 class TranslateRequest(BaseModel):
-
-    text: str
-
+    text: str = Field(..., min_length=1)
     source: str = "auto"
-
     target: str = "km"
 
+
 class TTSRequest(BaseModel):
-    text: str
+    text: str = Field(..., min_length=1)
     lang: str = "km"
-    voice: str = "km-KH-PisethNeural"
+    voice: str = DEFAULT_VOICE
+
 
 class DubbingRequest(BaseModel):
     filename: str
-    segments: list
-    voice: str = "km-KH-PisethNeural"
+    segments: list[dict[str, Any]]
+    voice: str = DEFAULT_VOICE
+
 
 # =========================================================
-
-# Home
-
+# HELPERS
 # =========================================================
 
-@app.get("/")
+def safe_name(filename: str) -> str:
+    return Path(filename).name
 
-def home():
 
-    return {
+def run_command(
+    command: list[str],
+    timeout: int = 600,
+) -> subprocess.CompletedProcess:
 
-        "status": "ok",
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
 
-        "message": "Chinese-Khmer Dubbing API is running",
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(
+            f"Command timeout after {timeout} seconds"
+        ) from exc
 
-        "version": "2.0.0",
+    if result.returncode != 0:
+        error = (
+            result.stderr.strip()
+            or result.stdout.strip()
+            or "Unknown command error"
+        )
 
-    }
+        raise RuntimeError(
+            error[-5000:]
+        )
 
-# =========================================================
+    return result
 
-# Health
 
-# =========================================================
+def split_text(
+    text: str,
+    max_chars: int = 2500,
+) -> list[str]:
 
-@app.get("/health")
+    text = text.strip()
 
-def health():
+    if not text:
+        return []
 
-    return {
+    if len(text) <= max_chars:
+        return [text]
 
-        "status": "healthy"
+    parts = []
+    current = ""
 
-    }
+    # Khmer/Chinese punctuation
+    separators = [
+        "។",
+        "៕",
+        "!",
+        "?",
+        "！",
+        "？",
+        "，",
+        ",",
+        " ",
+    ]
 
-# =========================================================
+    words = text
 
-# Upload
+    for char in words:
 
-# =========================================================
+        current += char
 
-@app.post("/upload")
+        if (
+            len(current) >= max_chars
+            and char in separators
+        ):
+            parts.append(current.strip())
+            current = ""
 
-async def upload_video(
+    if current.strip():
+        parts.append(current.strip())
 
-    file: UploadFile = File(...)
+    # Safety fallback
+    final_parts = []
 
+    for part in parts:
+        if len(part) <= max_chars:
+            final_parts.append(part)
+        else:
+            for i in range(
+                0,
+                len(part),
+                max_chars,
+            ):
+                final_parts.append(
+                    part[i:i + max_chars].strip()
+                )
+
+    return [
+        p for p in final_parts
+        if p
+    ]
+
+
+async def generate_tts_with_retry(
+    text: str,
+    output_file: Path,
+    voice: str,
+    retries: int = 3,
 ):
 
-    if not file.filename:
+    last_error = None
 
-        raise HTTPException(
+    chunks = split_text(
+        text,
+        max_chars=2500,
+    )
 
-            status_code=400,
-
-            detail="No file selected",
-
+    if not chunks:
+        raise RuntimeError(
+            "TTS text is empty"
         )
 
-    extension = Path(
+    # Single chunk
+    if len(chunks) == 1:
 
-        file.filename
+        for attempt in range(retries):
 
-    ).suffix.lower()
+            try:
 
-    if extension not in ALLOWED_VIDEO_EXTENSIONS:
+                communicate = edge_tts.Communicate(
+                    chunks[0],
+                    voice,
+                )
 
-        raise HTTPException(
+                await communicate.save(
+                    str(output_file)
+                )
 
-            status_code=400,
+                if (
+                    output_file.exists()
+                    and output_file.stat().st_size > 0
+                ):
+                    return
 
-            detail=(
+            except Exception as exc:
+                last_error = exc
 
-                "Unsupported video format. "
+                if attempt < retries - 1:
+                    await asyncio.sleep(
+                        2 ** attempt
+                    )
 
-                f"Allowed: {', '.join(sorted(ALLOWED_VIDEO_EXTENSIONS))}"
-
-            ),
-
+        raise RuntimeError(
+            f"TTS failed: {last_error}"
         )
 
-    original_name = Path(
-
-        file.filename
-
-    ).name
-
-    stem = (
-
-        Path(original_name).stem
-
-        or "video"
-
-    )
-
-    filename = (
-
-        f"{stem}_"
-
-        f"{uuid.uuid4().hex[:8]}"
-
-        f"{extension}"
-
-    )
-
-    output_file = (
-
-        UPLOAD_DIR / filename
-
-    )
+    # Multiple chunks
+    chunk_files = []
 
     try:
 
-        with output_file.open("wb") as buffer:
+        for index, chunk in enumerate(chunks):
 
-            shutil.copyfileobj(
-
-                file.file,
-
-                buffer,
-
+            chunk_file = (
+                output_file.parent
+                / f"{output_file.stem}_part_{index}.mp3"
             )
 
-    except Exception as exc:
+            for attempt in range(retries):
 
-        raise HTTPException(
+                try:
 
-            status_code=500,
+                    communicate = edge_tts.Communicate(
+                        chunk,
+                        voice,
+                    )
 
-            detail=f"Upload failed: {exc}",
+                    await communicate.save(
+                        str(chunk_file)
+                    )
 
-        ) from exc
+                    if (
+                        chunk_file.exists()
+                        and chunk_file.stat().st_size > 0
+                    ):
+                        break
+
+                except Exception as exc:
+                    last_error = exc
+
+                    if attempt < retries - 1:
+                        await asyncio.sleep(
+                            2 ** attempt
+                        )
+
+            if not chunk_file.exists():
+                raise RuntimeError(
+                    f"TTS chunk failed: {last_error}"
+                )
+
+            chunk_files.append(chunk_file)
+
+        concat_file = (
+            output_file.parent
+            / f"{output_file.stem}_concat.txt"
+        )
+
+        with concat_file.open(
+            "w",
+            encoding="utf-8",
+        ) as f:
+
+            for chunk_file in chunk_files:
+
+                escaped = str(
+                    chunk_file
+                ).replace(
+                    "'",
+                    "'\\''",
+                )
+
+                f.write(
+                    f"file '{escaped}'\n"
+                )
+
+        run_command(
+            [
+                "ffmpeg",
+                "-y",
+                "-f",
+                "concat",
+                "-safe",
+                "0",
+                "-i",
+                str(concat_file),
+                "-c:a",
+                "libmp3lame",
+                "-b:a",
+                "128k",
+                str(output_file),
+            ],
+            timeout=300,
+        )
 
     finally:
 
+        for file in chunk_files:
+            file.unlink(
+                missing_ok=True
+            )
+
+
+def cleanup_old_files(
+    max_age_seconds: int = 3600,
+):
+
+    import time
+
+    now = time.time()
+
+    for directory in (
+        UPLOAD_DIR,
+        AUDIO_DIR,
+        OUTPUT_DIR,
+    ):
+
+        for file in directory.iterdir():
+
+            try:
+
+                if not file.is_file():
+                    continue
+
+                age = (
+                    now
+                    - file.stat().st_mtime
+                )
+
+                if age > max_age_seconds:
+                    file.unlink(
+                        missing_ok=True
+                    )
+
+            except Exception as exc:
+                print(
+                    f"Cleanup warning: {exc}"
+                )
+
+
+# =========================================================
+# HOME
+# =========================================================
+
+@app.get("/")
+def home():
+
+    return {
+        "status": "ok",
+        "message": (
+            "Chinese-Khmer Dubbing API "
+            "is running"
+        ),
+        "version": APP_VERSION,
+    }
+
+
+# =========================================================
+# HEALTH
+# =========================================================
+
+@app.get("/health")
+def health():
+
+    return {
+        "status": "healthy",
+        "version": APP_VERSION,
+    }
+
+
+# =========================================================
+# UPLOAD
+# =========================================================
+
+@app.post("/upload")
+async def upload_video(
+    file: UploadFile = File(...),
+):
+
+    cleanup_old_files()
+
+    if not file.filename:
+        raise HTTPException(
+            status_code=400,
+            detail="No file selected",
+        )
+
+    extension = (
+        Path(file.filename)
+        .suffix
+        .lower()
+    )
+
+    if extension not in ALLOWED_VIDEO_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Unsupported video format. "
+                f"Allowed: "
+                f"{', '.join(sorted(ALLOWED_VIDEO_EXTENSIONS))}"
+            ),
+        )
+
+    original_name = safe_name(
+        file.filename
+    )
+
+    stem = (
+        Path(original_name).stem
+        or "video"
+    )
+
+    filename = (
+        f"{stem}_"
+        f"{uuid.uuid4().hex[:10]}"
+        f"{extension}"
+    )
+
+    output_file = (
+        UPLOAD_DIR / filename
+    )
+
+    total_bytes = 0
+
+    try:
+
+        with output_file.open(
+            "wb"
+        ) as buffer:
+
+            while True:
+
+                chunk = await file.read(
+                    1024 * 1024
+                )
+
+                if not chunk:
+                    break
+
+                total_bytes += len(chunk)
+
+                if total_bytes > MAX_UPLOAD_BYTES:
+
+                    output_file.unlink(
+                        missing_ok=True
+                    )
+
+                    raise HTTPException(
+                        status_code=413,
+                        detail=(
+                            "Video is too large. "
+                            "Maximum size is 500 MB."
+                        ),
+                    )
+
+                buffer.write(chunk)
+
+    except HTTPException:
+        raise
+
+    except Exception as exc:
+
+        output_file.unlink(
+            missing_ok=True
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Upload failed: {exc}",
+        ) from exc
+
+    finally:
         await file.close()
 
     return {
-
         "status": "uploaded",
-
         "filename": filename,
-
-        "message": "Video uploaded successfully",
-
+        "size": total_bytes,
+        "message": (
+            "Video uploaded successfully"
+        ),
     }
 
+
 # =========================================================
-
-# Transcribe
-
+# TRANSCRIBE
 # =========================================================
 
 @app.post("/transcribe")
-async def transcribe_video(filename: str):
-    safe_filename = Path(filename).name
-    video_file = UPLOAD_DIR / safe_filename
+async def transcribe_video(
+    filename: str,
+):
+
+    cleanup_old_files()
+
+    safe_filename = safe_name(
+        filename
+    )
+
+    video_file = (
+        UPLOAD_DIR / safe_filename
+    )
 
     if not video_file.exists():
         raise HTTPException(
             status_code=404,
-            detail="Video file not found"
+            detail="Video file not found",
         )
 
-    try:
-        whisper_model = get_whisper_model()
+    work_dir = (
+        BASE_DIR
+        / f"transcribe_{uuid.uuid4().hex}"
+    )
 
-        segments, info = whisper_model.transcribe(
-    str(video_file),
-    language="zh",
-    beam_size=1,
-    vad_filter=True,
-    condition_on_previous_text=False,
-)
+    work_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    audio_file = (
+        work_dir / "audio.wav"
+    )
+
+    try:
+
+        # -----------------------------------------
+        # Extract audio
+        # -----------------------------------------
+
+        run_command(
+            [
+                "ffmpeg",
+                "-y",
+                "-i",
+                str(video_file),
+                "-vn",
+                "-ac",
+                "1",
+                "-ar",
+                "16000",
+                "-c:a",
+                "pcm_s16le",
+                str(audio_file),
+            ],
+            timeout=600,
+        )
+
+        if not audio_file.exists():
+            raise RuntimeError(
+                "FFmpeg did not create audio file"
+            )
+
+        # -----------------------------------------
+        # Whisper
+        # -----------------------------------------
+
+        model = await get_whisper_model()
+
+        segments, info = await asyncio.to_thread(
+            model.transcribe,
+            str(audio_file),
+            language="zh",
+            beam_size=1,
+            best_of=1,
+            temperature=0,
+            vad_filter=True,
+            condition_on_previous_text=False,
+        )
 
         transcript = []
         full_text_parts = []
 
         for segment in segments:
-            text = segment.text.strip()
 
-            if text:
-                full_text_parts.append(text)
+            text = (
+                segment.text
+                .strip()
+            )
 
-                transcript.append({
-                    "start": segment.start,
-                    "end": segment.end,
-                    "text": text,
-                })
+            if not text:
+                continue
 
-        full_text = " ".join(full_text_parts)
+            item = {
+                "start": float(
+                    segment.start
+                ),
+                "end": float(
+                    segment.end
+                ),
+                "text": text,
+            }
+
+            transcript.append(item)
+            full_text_parts.append(text)
+
+        full_text = " ".join(
+            full_text_parts
+        )
 
         return {
             "status": "transcribed",
-            "filename": video_file.name,
-            "language": info.language,
+            "filename": safe_filename,
+            "language": getattr(
+                info,
+                "language",
+                "zh",
+            ),
+            "duration": getattr(
+                info,
+                "duration",
+                None,
+            ),
             "text": full_text,
             "segments": transcript,
+            "segment_count": len(
+                transcript
+            ),
         }
 
+    except HTTPException:
+        raise
+
     except Exception as exc:
+
+        print(
+            f"TRANSCRIBE ERROR: {exc}"
+        )
+
         raise HTTPException(
             status_code=500,
-            detail=f"Transcription failed: {exc}",
+            detail=(
+                "Transcription failed: "
+                f"{str(exc)}"
+            ),
         ) from exc
 
+    finally:
+
+        shutil.rmtree(
+            work_dir,
+            ignore_errors=True,
+        )
+
+
 # =========================================================
-
-# Translate
-
+# TRANSLATE
 # =========================================================
 
 @app.post("/translate")
-
 async def translate(
-
-    data: TranslateRequest
-
+    data: TranslateRequest,
 ):
 
     text = data.text.strip()
 
     if not text:
-
         raise HTTPException(
-
             status_code=400,
-
             detail="Text cannot be empty",
-
         )
 
     try:
 
-        translated = GoogleTranslator(
+        chunks = split_text(
+            text,
+            max_chars=3000,
+        )
 
-            source=data.source or "auto",
+        translated_parts = []
 
-            target=data.target or "km",
+        for chunk in chunks:
 
-        ).translate(text)
+            result = await asyncio.to_thread(
+                GoogleTranslator(
+                    source=data.source or "auto",
+                    target=data.target or "km",
+                ).translate,
+                chunk,
+            )
+
+            if result:
+                translated_parts.append(
+                    result.strip()
+                )
+
+        translated = " ".join(
+            translated_parts
+        )
 
         return {
-
             "success": True,
-
             "original": text,
-
             "translation": translated,
-
             "source": data.source,
-
             "target": data.target,
-
         }
 
     except Exception as exc:
 
+        print(
+            f"TRANSLATION ERROR: {exc}"
+        )
+
         raise HTTPException(
-
             status_code=500,
-
-            detail=f"Translation failed: {exc}",
-
+            detail=(
+                "Translation failed: "
+                f"{str(exc)}"
+            ),
         ) from exc
 
+
 # =========================================================
-
 # TTS
-
 # =========================================================
 
 @app.post("/tts")
-async def text_to_speech(data: TTSRequest):
+async def text_to_speech(
+    data: TTSRequest,
+):
 
-    if not data.text or not data.text.strip():
+    cleanup_old_files()
+
+    text = data.text.strip()
+
+    if not text:
         raise HTTPException(
             status_code=400,
-            detail="Text cannot be empty"
+            detail="Text cannot be empty",
         )
+
+    voice = (
+        data.voice.strip()
+        if data.voice
+        else DEFAULT_VOICE
+    )
+
+    filename = (
+        f"{uuid.uuid4().hex}.mp3"
+    )
+
+    filepath = (
+        AUDIO_DIR / filename
+    )
 
     try:
-        filename = f"{uuid.uuid4()}.mp3"
-        filepath = AUDIO_DIR / filename
 
-        voice = data.voice or "km-KH-PisethNeural"
-
-        communicate = edge_tts.Communicate(
-            data.text,
-            voice
+        await generate_tts_with_retry(
+            text=text,
+            output_file=filepath,
+            voice=voice,
+            retries=3,
         )
-
-        await communicate.save(str(filepath))
 
         return {
             "success": True,
             "filename": filename,
             "voice": voice,
-            "audio_url": f"/audio/{filename}"
+            "audio_url": (
+                f"/audio/{filename}"
+            ),
         }
 
-    except Exception as e:
+    except Exception as exc:
+
+        filepath.unlink(
+            missing_ok=True
+        )
+
+        print(
+            f"TTS ERROR: {exc}"
+        )
+
         raise HTTPException(
             status_code=500,
-            detail=f"TTS generation failed: {str(e)}"
-        )
+            detail=(
+                "TTS generation failed: "
+                f"{str(exc)}"
+            ),
+        ) from exc
+
+
 # =========================================================
-
-# Create Final Dubbing Video
-
+# CREATE DUBBING
 # =========================================================
 
 @app.post("/create-dubbing")
-
 async def create_dubbing(
-
-    data: DubbingRequest
-
+    data: DubbingRequest,
 ):
 
-    safe_filename = Path(
+    cleanup_old_files()
 
+    safe_filename = safe_name(
         data.filename
-
-    ).name
+    )
 
     video_file = (
-
-        UPLOAD_DIR /
-
-        safe_filename
-
+        UPLOAD_DIR / safe_filename
     )
 
     if not video_file.exists():
-
         raise HTTPException(
-
             status_code=404,
-
             detail="Video file not found",
-
         )
 
     if not data.segments:
-
         raise HTTPException(
-
             status_code=400,
-
             detail="No dubbing segments",
-
         )
 
     job_id = uuid.uuid4().hex
 
     work_dir = (
-
-        Path("/tmp") /
-
-        f"dubbing_{job_id}"
-
+        BASE_DIR
+        / f"dubbing_{job_id}"
     )
 
     work_dir.mkdir(
-
         parents=True,
-
         exist_ok=True,
-
     )
 
     try:
 
-        # ---------------------------------------------
-
+        # -----------------------------------------
         # Get video duration
+        # -----------------------------------------
 
-        # ---------------------------------------------
-
-        probe = subprocess.run(
-
+        probe = run_command(
             [
-
                 "ffprobe",
-
                 "-v",
-
                 "error",
-
                 "-show_entries",
-
                 "format=duration",
-
                 "-of",
-
                 "default=noprint_wrappers=1:nokey=1",
-
                 str(video_file),
-
             ],
-
-            capture_output=True,
-
-            text=True,
-
-            check=True,
-
+            timeout=60,
         )
 
         duration = float(
-
             probe.stdout.strip()
-
         )
 
-        # ---------------------------------------------
-        # Generate TTS for each segment
-        # ---------------------------------------------
+        if duration <= 0:
+            raise RuntimeError(
+                "Invalid video duration"
+            )
+
+        # -----------------------------------------
+        # Generate TTS
+        # -----------------------------------------
 
         audio_files = []
 
-        for index, segment in enumerate(data.segments):
+        voice = (
+            data.voice.strip()
+            if data.voice
+            else DEFAULT_VOICE
+        )
+
+        for index, segment in enumerate(
+            data.segments
+        ):
+
+            if not isinstance(
+                segment,
+                dict,
+            ):
+                continue
 
             text = str(
-                segment.get("translation", "")
+                segment.get(
+                    "translation",
+                    segment.get(
+                        "text",
+                        "",
+                    ),
+                )
             ).strip()
 
             if not text:
                 continue
 
-            start = float(
-                segment.get("start", 0)
-            )
+            try:
+                start = float(
+                    segment.get(
+                        "start",
+                        0,
+                    )
+                )
+            except Exception:
+                start = 0
 
-            end = float(
-                segment.get("end", start + 1)
-            )
-
-            if end <= start:
+            try:
+                end = float(
+                    segment.get(
+                        "end",
+                        start + 1,
+                    )
+                )
+            except Exception:
                 end = start + 1
 
+            start = max(
+                0,
+                start,
+            )
+
+            end = max(
+                start + 0.1,
+                end,
+            )
+
+            # Do not put audio outside video
+            if start >= duration:
+                continue
+
+            end = min(
+                end,
+                duration,
+            )
+
             tts_file = (
-                work_dir /
-                f"tts_{index}.mp3"
+                work_dir
+                / f"tts_{index}.mp3"
             )
 
-            voice = data.voice or "km-KH-PisethNeural"
-
-            communicate = edge_tts.Communicate(
-                text,
-                voice
-            )
-
-            await communicate.save(
-                str(tts_file)
+            await generate_tts_with_retry(
+                text=text,
+                output_file=tts_file,
+                voice=voice,
+                retries=3,
             )
 
             audio_files.append(
@@ -603,375 +1042,272 @@ async def create_dubbing(
                     "end": end,
                 }
             )
-        # ---------------------------------------------
 
-        # Create silent base audio
+        if not audio_files:
+            raise RuntimeError(
+                "No valid TTS segments"
+            )
 
-        # ---------------------------------------------
+        # -----------------------------------------
+        # Base silent audio
+        # -----------------------------------------
 
         base_audio = (
-
-            work_dir /
-
-            "base_audio.wav"
-
+            work_dir
+            / "base_audio.wav"
         )
 
-        subprocess.run(
-
+        run_command(
             [
-
                 "ffmpeg",
-
                 "-y",
-
                 "-f",
-
                 "lavfi",
-
                 "-i",
-
                 "anullsrc=r=44100:cl=stereo",
-
                 "-t",
-
                 str(duration),
-
                 "-c:a",
-
                 "pcm_s16le",
-
                 str(base_audio),
-
             ],
-
-            capture_output=True,
-
-            check=True,
-
+            timeout=300,
         )
 
-        # ---------------------------------------------
-
-        # Prepare audio inputs
-
-        # ---------------------------------------------
+        # -----------------------------------------
+        # Build inputs
+        # -----------------------------------------
 
         inputs = [
-
             "-i",
-
-            str(base_audio)
-
+            str(base_audio),
         ]
 
         for item in audio_files:
 
             inputs.extend(
-
                 [
-
                     "-i",
-
-                    str(item["file"])
-
+                    str(item["file"]),
                 ]
-
             )
 
-        # ---------------------------------------------
+        # -----------------------------------------
+        # Build filters
+        # -----------------------------------------
 
-        # Build FFmpeg filter
-
-        # ---------------------------------------------
-
-        filters = []
-
-        filters.append(
-
+        filters = [
             "[0:a]anull[a0]"
-
-        )
+        ]
 
         mix_inputs = [
-
             "[a0]"
-
         ]
 
         for index, item in enumerate(
-
             audio_files,
-
-            start=1
-
+            start=1,
         ):
 
             delay_ms = max(
-
                 0,
-
                 int(
-
                     item["start"] * 1000
-
-                )
-
+                ),
             )
 
             filters.append(
-
                 f"[{index}:a]"
-
                 f"adelay={delay_ms}:all=1,"
-
+                f"aresample=44100,"
                 f"volume=1.0"
-
                 f"[a{index}]"
-
             )
 
             mix_inputs.append(
-
                 f"[a{index}]"
-
             )
 
         filter_complex = (
-
             ";".join(filters)
-
             + ";"
-
             + "".join(mix_inputs)
-
             + f"amix=inputs={len(mix_inputs)}:"
-
               "duration=longest:"
-
-              "dropout_transition=0"
-
+              "dropout_transition=0,"
+              "aresample=44100"
               "[mixed]"
-
         )
 
+        # -----------------------------------------
+        # Output
+        # -----------------------------------------
+
         output_filename = (
-
-            f"khmer_dubbed_"
-
-            f"{job_id}.mp4"
-
+            f"khmer_dubbed_{job_id}.mp4"
         )
 
         output_file = (
-
-            OUTPUT_DIR /
-
-            output_filename
-
+            OUTPUT_DIR
+            / output_filename
         )
 
-        # ---------------------------------------------
-
-        # Merge video + Khmer audio
-
-        # ---------------------------------------------
-
         command = [
-
             "ffmpeg",
-
             "-y",
 
             "-i",
-
             str(video_file),
 
             *inputs,
 
             "-filter_complex",
-
             filter_complex,
 
             "-map",
-
             "0:v:0",
 
             "-map",
-
             "[mixed]",
 
             "-c:v",
-
             "libx264",
 
             "-preset",
-
             "veryfast",
 
             "-crf",
-
             "23",
 
             "-c:a",
-
             "aac",
 
             "-b:a",
-
             "128k",
 
-            "-shortest",
+            "-t",
+            str(duration),
 
             "-movflags",
-
             "+faststart",
 
             str(output_file),
-
         ]
 
-        result = subprocess.run(
+        run_command(
             command,
-            capture_output=True,
-            text=True,
+            timeout=1200,
         )
 
-        if result.returncode != 0:
+        if (
+            not output_file.exists()
+            or output_file.stat().st_size <= 0
+        ):
             raise RuntimeError(
-                result.stderr[-4000:]
+                "FFmpeg did not create output video"
             )
 
         return {
             "success": True,
             "filename": output_filename,
-            "video_url": f"/video/{output_filename}",
-            "message": "Khmer dubbed video created successfully",
+            "video_url": (
+                f"/video/{output_filename}"
+            ),
+            "message": (
+                "Khmer dubbed video "
+                "created successfully"
+            ),
         }
 
     except HTTPException:
         raise
 
     except Exception as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Dubbing failed: {exc}",
-        ) from exc
 
-        # ---------------------------------------------
-
-        # Cleanup temporary files
-
-        # ---------------------------------------------
-
-        shutil.rmtree(
-
-            work_dir,
-
-            ignore_errors=True,
-
+        print(
+            f"DUBBING ERROR: {exc}"
         )
 
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Dubbing failed: "
+                f"{str(exc)}"
+            ),
+        ) from exc
+
+    finally:
+
+        # IMPORTANT:
+        # This now ALWAYS runs.
+        shutil.rmtree(
+            work_dir,
+            ignore_errors=True,
+        )
+
+
 # =========================================================
-
-# Audio
-
+# AUDIO
 # =========================================================
 
 @app.get("/audio/{filename}")
-
 async def get_audio(
-
-    filename: str
-
+    filename: str,
 ):
 
-    safe_filename = Path(
-
+    safe_filename = safe_name(
         filename
-
-    ).name
+    )
 
     filepath = (
-
-        AUDIO_DIR /
-
-        safe_filename
-
+        AUDIO_DIR / safe_filename
     )
 
     if not filepath.exists():
-
         raise HTTPException(
-
             status_code=404,
-
             detail="Audio file not found",
-
         )
 
     return FileResponse(
-
         path=str(filepath),
-
         media_type="audio/mpeg",
-
         filename=safe_filename,
-
     )
 
+
 # =========================================================
-
-# Final Video
-
+# VIDEO
 # =========================================================
 
 @app.get("/video/{filename}")
-
 async def get_video(
-
-    filename: str
-
+    filename: str,
 ):
 
-    safe_filename = Path(
-
+    safe_filename = safe_name(
         filename
-
-    ).name
+    )
 
     filepath = (
-
-        OUTPUT_DIR /
-
-        safe_filename
-
+        OUTPUT_DIR / safe_filename
     )
 
     if not filepath.exists():
-
         raise HTTPException(
-
             status_code=404,
-
             detail="Video file not found",
-
         )
 
     return FileResponse(
-
         path=str(filepath),
-
         media_type="video/mp4",
-
         filename=safe_filename,
-
     )
 
+
 # =========================================================
-
-# Start Server
-
+# SERVER
 # =========================================================
 
 if __name__ == "__main__":
@@ -979,23 +1315,14 @@ if __name__ == "__main__":
     import uvicorn
 
     port = int(
-
         os.environ.get(
-
             "PORT",
-
             "10000",
-
         )
-
     )
 
     uvicorn.run(
-
         app,
-
         host="0.0.0.0",
-
         port=port,
-
     )
