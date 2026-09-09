@@ -727,160 +727,69 @@ async def upload_video(
 # =========================================================
 
 @app.post("/transcribe")
-async def transcribe_video(
-    filename: str,
-):
-
-    cleanup_old_files()
-
-    safe_filename = safe_name(
-        filename
-    )
-
-    video_file = (
-        UPLOAD_DIR / safe_filename
-    )
-
-    if not video_file.exists():
-        raise HTTPException(
-            status_code=404,
-            detail="Video file not found",
-        )
-
-    work_dir = (
-        BASE_DIR
-        / f"transcribe_{uuid.uuid4().hex}"
-    )
-
-    work_dir.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
-    audio_file = (
-        work_dir / "audio.wav"
-    )
+async def transcribe_video(filename: str):
+    video_path = UPLOAD_DIR / filename
 
     try:
+        print(f"TRANSCRIBE START: {video_path}")
 
-        # -----------------------------------------
-        # Extract audio
-        # -----------------------------------------
-
-        run_command(
-            [
-                "ffmpeg",
-                "-y",
-                "-i",
-                str(video_file),
-                "-vn",
-                "-ac",
-                "1",
-                "-ar",
-                "16000",
-                "-c:a",
-                "pcm_s16le",
-                str(audio_file),
-            ],
-            timeout=600,
-        )
-
-        if not audio_file.exists():
-            raise RuntimeError(
-                "FFmpeg did not create audio file"
+        if not video_path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Video not found: {filename}"
             )
 
-        # -----------------------------------------
-        # Whisper
-        # -----------------------------------------
+        print(f"FILE SIZE: {video_path.stat().st_size} bytes")
 
-        model = await get_whisper_model()
+        model = get_whisper_model()
 
-        segments, info = await asyncio.to_thread(
-            model.transcribe,
-            str(audio_file),
+        print("WHISPER MODEL LOADED")
+
+        segments, info = model.transcribe(
+            str(video_path),
             language="zh",
             beam_size=1,
-            best_of=1,
-            temperature=0,
             vad_filter=True,
-            condition_on_previous_text=False,
+            condition_on_previous_text=False
         )
 
-        transcript = []
-        full_text_parts = []
+        results = []
 
         for segment in segments:
+            text = segment.text.strip()
 
-            text = (
-                segment.text
-                .strip()
-            )
+            if text:
+                results.append({
+                    "start": float(segment.start),
+                    "end": float(segment.end),
+                    "text": text
+                })
 
-            if not text:
-                continue
-
-            item = {
-                "start": float(
-                    segment.start
-                ),
-                "end": float(
-                    segment.end
-                ),
-                "text": text,
-            }
-
-            transcript.append(item)
-            full_text_parts.append(text)
-
-        full_text = " ".join(
-            full_text_parts
-        )
+        print(f"TRANSCRIBE DONE: {len(results)} segments")
 
         return {
-            "status": "transcribed",
-            "filename": safe_filename,
-            "language": getattr(
-                info,
-                "language",
-                "zh",
-            ),
-            "duration": getattr(
-                info,
-                "duration",
-                None,
-            ),
-            "text": full_text,
-            "segments": transcript,
-            "segment_count": len(
-                transcript
-            ),
+            "status": "success",
+            "filename": filename,
+            "language": "zh",
+            "segments": results
         }
 
     except HTTPException:
         raise
 
     except Exception as exc:
-
         print(
-            f"TRANSCRIBE ERROR: {exc}"
+            f"TRANSCRIBE ERROR: "
+            f"{type(exc).__name__}: {exc}"
         )
 
         raise HTTPException(
             status_code=500,
             detail=(
-                "Transcription failed: "
-                f"{str(exc)}"
-            ),
+                f"Transcription failed: "
+                f"{type(exc).__name__}: {exc}"
+            )
         ) from exc
-
-    finally:
-
-        shutil.rmtree(
-            work_dir,
-            ignore_errors=True,
-        )
-
 
 # =========================================================
 # TRANSLATE
