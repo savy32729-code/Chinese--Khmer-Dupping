@@ -653,113 +653,74 @@ def cleanup_old_files(max_age_seconds=3600):
 
 @app.post("/upload")
 async def upload_video(
-    file: UploadFile = File(...),
+    file: UploadFile = File(...)
 ):
-
-    cleanup_old_files()
-
-    if not file.filename:
-        raise HTTPException(
-            status_code=400,
-            detail="No file selected",
-        )
-
-    extension = (
-        Path(file.filename)
-        .suffix
-        .lower()
-    )
-
-    if extension not in ALLOWED_VIDEO_EXTENSIONS:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Unsupported video format. "
-                f"Allowed: "
-                f"{', '.join(sorted(ALLOWED_VIDEO_EXTENSIONS))}"
-            ),
-        )
-
-    original_name = safe_name(
-        file.filename
-    )
-
-    stem = (
-        Path(original_name).stem
-        or "video"
-    )
-
-    filename = (
-        f"{stem}_"
-        f"{uuid.uuid4().hex[:10]}"
-        f"{extension}"
-    )
-
-    output_file = (
-        UPLOAD_DIR / filename
-    )
-
-    total_bytes = 0
-
     try:
+        if not file.filename:
+            raise HTTPException(
+                status_code=400,
+                detail="No file selected"
+            )
 
-        with output_file.open(
-            "wb"
-        ) as buffer:
+        original_name = Path(file.filename).name
+        extension = Path(original_name).suffix.lower()
 
+        if extension not in ALLOWED_VIDEO_EXTENSIONS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported video format: {extension}"
+            )
+
+        stem = Path(original_name).stem or "video"
+
+        filename = f"{stem}_{uuid.uuid4().hex[:8]}{extension}"
+        output_file = UPLOAD_DIR / filename
+
+        print(f"UPLOAD START: {original_name}")
+        print(f"UPLOAD PATH: {output_file}")
+
+        total_bytes = 0
+
+        with open(output_file, "wb") as buffer:
             while True:
-
-                chunk = await file.read(
-                    1024 * 1024
-                )
+                chunk = await file.read(1024 * 1024)
 
                 if not chunk:
                     break
 
+                buffer.write(chunk)
                 total_bytes += len(chunk)
 
-                if total_bytes > MAX_UPLOAD_BYTES:
+        await file.close()
 
-                    output_file.unlink(
-                        missing_ok=True
-                    )
+        print(f"UPLOAD DONE: {total_bytes} bytes")
 
-                    raise HTTPException(
-                        status_code=413,
-                        detail=(
-                            "Video is too large. "
-                            "Maximum size is 500 MB."
-                        ),
-                    )
+        if total_bytes == 0:
+            if output_file.exists():
+                output_file.unlink()
 
-                buffer.write(chunk)
+            raise HTTPException(
+                status_code=400,
+                detail="Uploaded file is empty"
+            )
+
+        return {
+            "status": "uploaded",
+            "filename": filename,
+            "size": total_bytes,
+            "message": "Video uploaded successfully"
+        }
 
     except HTTPException:
         raise
 
     except Exception as exc:
-
-        output_file.unlink(
-            missing_ok=True
-        )
+        print(f"UPLOAD ERROR: {type(exc).__name__}: {exc}")
 
         raise HTTPException(
             status_code=500,
-            detail=f"Upload failed: {exc}",
+            detail=f"Upload failed: {type(exc).__name__}: {exc}"
         ) from exc
-
-    finally:
-        await file.close()
-
-    return {
-        "status": "uploaded",
-        "filename": filename,
-        "size": total_bytes,
-        "message": (
-            "Video uploaded successfully"
-        ),
-    }
-
 
 # =========================================================
 # TRANSCRIBE
