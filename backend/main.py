@@ -96,7 +96,7 @@ ALLOWED_VIDEO_EXTENSIONS = {
 
 model = WhisperModel(
 
-    "base",
+    "tiny",
 
     device="cpu",
 
