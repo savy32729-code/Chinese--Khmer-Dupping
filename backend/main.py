@@ -79,11 +79,20 @@ VOICE_MAP = {
 # CPU-friendly model for Render
 MODEL_SIZE = os.getenv("WHISPER_MODEL", "small")
 
-whisper_model = WhisperModel(
-    MODEL_SIZE,
-    device="cpu",
-    compute_type="int8"
-)
+whisper_model = None
+
+
+def get_whisper_model():
+    global whisper_model
+
+    if whisper_model is None:
+        whisper_model = WhisperModel(
+            MODEL_SIZE,
+            device="cpu",
+            compute_type="int8"
+        )
+
+    return whisper_model
 
 
 # =========================================================
@@ -248,13 +257,17 @@ async def transcribe_video(
 
     try:
 
-        segments, info = whisper_model.transcribe(
-            str(video_path),
-            language="zh",
-            beam_size=1,
-            vad_filter=True
-        )
+        model = get_whisper_model()
 
+segments, info = model.transcribe(
+    str(video_path),
+    language="zh",
+    beam_size=1,
+    best_of=1,
+    temperature=0,
+    vad_filter=True,
+    condition_on_previous_text=False
+)
         result_segments = []
 
         for segment in segments:
