@@ -1,37 +1,29 @@
 import os
 import shutil
-import subprocess
 import uuid
+import subprocess
 import asyncio
-import time
 from pathlib import Path
-from typing import Any
-
-import edge_tts
-from deep_translator import GoogleTranslator
-from faster_whisper import WhisperModel
+from typing import Optional, List
 
 from fastapi import FastAPI, HTTPException, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
+
+from faster_whisper import WhisperModel
+from deep_translator import GoogleTranslator
+import edge_tts
 
 
 # =========================================================
 # APP
 # =========================================================
 
-APP_VERSION = "3.1.0"
-
 app = FastAPI(
     title="Chinese-Khmer Dubbing API",
-    version=APP_VERSION,
+    version="3.0.0"
 )
-
-
-# =========================================================
-# CORS
-# =========================================================
 
 app.add_middleware(
     CORSMiddleware,
@@ -46,14 +38,13 @@ app.add_middleware(
 # DIRECTORIES
 # =========================================================
 
-BASE_DIR = Path("/tmp")
+UPLOAD_DIR = Path("/tmp/uploads")
+AUDIO_DIR = Path("/tmp/audio")
+OUTPUT_DIR = Path("/tmp/output")
 
-UPLOAD_DIR = BASE_DIR / "uploads"
-AUDIO_DIR = BASE_DIR / "audio"
-OUTPUT_DIR = BASE_DIR / "output"
-
-for directory in (UPLOAD_DIR, AUDIO_DIR, OUTPUT_DIR):
-    directory.mkdir(parents=True, exist_ok=True)
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # =========================================================
@@ -66,812 +57,387 @@ ALLOWED_VIDEO_EXTENSIONS = {
     ".mkv",
     ".avi",
     ".webm",
+    ".m4v"
 }
 
-MAX_UPLOAD_BYTES = 500 * 1024 * 1024
+DEFAULT_VOICE = "km-KH-PisethNeural"
 
-WHISPER_MODEL_NAME = os.getenv(
-    "WHISPER_MODEL",
-    "tiny",
-)
+VOICE_MAP = {
+    "piseth": "km-KH-PisethNeural",
+    "male": "km-KH-PisethNeural",
 
-WHISPER_DEVICE = os.getenv(
-    "WHISPER_DEVICE",
-    "cpu",
-)
-
-WHISPER_COMPUTE_TYPE = os.getenv(
-    "WHISPER_COMPUTE_TYPE",
-    "int8",
-)
-
-DEFAULT_VOICE = os.getenv(
-    "TTS_VOICE",
-    "km-KH-PisethNeural",
-)
+    # Microsoft Edge Khmer female voice
+    "sreymom": "km-KH-SreymomNeural",
+    "female": "km-KH-SreymomNeural",
+}
 
 
 # =========================================================
 # WHISPER
 # =========================================================
 
-whisper_model = None
-whisper_lock = asyncio.Lock()
+# CPU-friendly model for Render
+MODEL_SIZE = os.getenv("WHISPER_MODEL", "small")
 
-
-async def get_whisper_model():
-    global whisper_model
-
-    if whisper_model is None:
-        async with whisper_lock:
-            if whisper_model is None:
-                print(
-                    f"Loading Whisper model: "
-                    f"{WHISPER_MODEL_NAME}"
-                )
-
-                whisper_model = WhisperModel(
-                    WHISPER_MODEL_NAME,
-                    device=WHISPER_DEVICE,
-                    compute_type=WHISPER_COMPUTE_TYPE,
-                )
-
-                print("Whisper model loaded.")
-
-    return whisper_model
+whisper_model = WhisperModel(
+    MODEL_SIZE,
+    device="cpu",
+    compute_type="int8"
+)
 
 
 # =========================================================
-# REQUEST MODELS
+# MODELS
 # =========================================================
 
-class TranslateSegment(BaseModel):
-    start: float
-    end: float
+class TTSRequest(BaseModel):
     text: str
+    voice: Optional[str] = DEFAULT_VOICE
 
 
 class TranslateRequest(BaseModel):
-    text: str | None = None
-    source: str = "zh"
-    target: str = "km"
-    segments: list[TranslateSegment] | None = None
+    text: str
 
-class TTSRequest(BaseModel):
-    text: str = Field(..., min_length=1)
-    lang: str = "km"
-    voice: str = DEFAULT_VOICE
+
+class Segment(BaseModel):
+    start: float
+    end: float
+    text: str
+    translation: Optional[str] = None
+    audio_filename: Optional[str] = None
 
 
 class DubbingRequest(BaseModel):
     filename: str
-    segments: list[dict[str, Any]]
-    voice: str = DEFAULT_VOICE
+    segments: List[Segment]
+    voice: Optional[str] = DEFAULT_VOICE
 
 
 # =========================================================
-# HELPERS
-# =========================================================
-
-def safe_name(filename: str) -> str:
-    return Path(filename).name
-
-
-def run_command(
-    command: list[str],
-    timeout: int = 600,
-) -> subprocess.CompletedProcess:
-
-    try:
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(
-            f"Command timeout after {timeout} seconds"
-        ) from exc
-
-    if result.returncode != 0:
-        error = (
-            result.stderr.strip()
-            or result.stdout.strip()
-            or "Unknown command error"
-        )
-
-        raise RuntimeError(
-            error[-5000:]
-        )
-
-    return result
-
-
-def split_text(
-    text: str,
-    max_chars: int = 2500,
-) -> list[str]:
-
-    text = text.strip()
-
-    if not text:
-        return []
-
-    if len(text) <= max_chars:
-        return [text]
-
-    parts = []
-    current = ""
-
-    # Khmer/Chinese punctuation
-    separators = [
-        "á",
-        "á",
-        "!",
-        "?",
-        "ï¼",
-        "ï¼",
-        "ï¼",
-        ",",
-        " ",
-    ]
-
-    words = text
-
-    for char in words:
-
-        current += char
-
-        if (
-            len(current) >= max_chars
-            and char in separators
-        ):
-            parts.append(current.strip())
-            current = ""
-
-    if current.strip():
-        parts.append(current.strip())
-
-    # Safety fallback
-    final_parts = []
-
-    for part in parts:
-        if len(part) <= max_chars:
-            final_parts.append(part)
-        else:
-            for i in range(
-                0,
-                len(part),
-                max_chars,
-            ):
-                final_parts.append(
-                    part[i:i + max_chars].strip()
-                )
-
-    return [
-        p for p in final_parts
-        if p
-    ]
-
-
-async def generate_tts_with_retry(
-    text: str,
-    output_file: Path,
-    voice: str,
-    retries: int = 3,
-):
-    """
-    TTS with automatic fallback.
-
-    1. Try Edge TTS
-    2. If Edge TTS fails (403/503/network/etc.)
-       automatically use Google TTS
-    """
-
-    text = text.strip()
-
-    if not text:
-        raise RuntimeError("TTS text is empty")
-
-    chunks = split_text(
-        text,
-        max_chars=1800,
-    )
-
-    if not chunks:
-        raise RuntimeError("No text for TTS")
-
-    # =====================================================
-    # 1. TRY EDGE TTS
-    # =====================================================
-
-    try:
-
-        print(
-            f"TTS: trying Edge TTS "
-            f"({len(chunks)} chunk(s))"
-        )
-
-        chunk_files = []
-
-        for index, chunk in enumerate(chunks):
-
-            chunk_file = (
-                output_file.parent
-                / f"{output_file.stem}_edge_{index}.mp3"
-            )
-
-            success = False
-            last_error = None
-
-            for attempt in range(retries):
-
-                try:
-
-                    communicate = edge_tts.Communicate(
-                        chunk,
-                        voice,
-                    )
-
-                    await communicate.save(
-                        str(chunk_file)
-                    )
-
-                    if (
-                        chunk_file.exists()
-                        and chunk_file.stat().st_size > 0
-                    ):
-                        success = True
-                        break
-
-                except Exception as exc:
-
-                    last_error = exc
-
-                    print(
-                        f"Edge TTS attempt "
-                        f"{attempt + 1}/{retries} "
-                        f"failed: {exc}"
-                    )
-
-                    if attempt < retries - 1:
-                        await asyncio.sleep(
-                            2 ** attempt
-                        )
-
-            if not success:
-                raise RuntimeError(
-                    f"Edge TTS failed: {last_error}"
-                )
-
-            chunk_files.append(
-                chunk_file
-            )
-
-        # ---------------------------------------------
-        # Merge Edge chunks
-        # ---------------------------------------------
-
-        if len(chunk_files) == 1:
-
-            shutil.copyfile(
-                chunk_files[0],
-                output_file,
-            )
-
-        else:
-
-            concat_file = (
-                output_file.parent
-                / f"{output_file.stem}_edge_concat.txt"
-            )
-
-            with concat_file.open(
-                "w",
-                encoding="utf-8",
-            ) as f:
-
-                for file in chunk_files:
-
-                    f.write(
-                        "file '"
-                        + str(file).replace(
-                            "'",
-                            "'\\''",
-                        )
-                        + "'\n"
-                    )
-
-            run_command(
-                [
-                    "ffmpeg",
-                    "-y",
-                    "-f",
-                    "concat",
-                    "-safe",
-                    "0",
-                    "-i",
-                    str(concat_file),
-                    "-c:a",
-                    "libmp3lame",
-                    "-b:a",
-                    "128k",
-                    str(output_file),
-                ],
-                timeout=300,
-            )
-
-            concat_file.unlink(
-                missing_ok=True
-            )
-
-        # Cleanup Edge chunks
-
-        for file in chunk_files:
-            file.unlink(
-                missing_ok=True
-            )
-
-        if (
-            output_file.exists()
-            and output_file.stat().st_size > 0
-        ):
-            print(
-                "TTS: Edge TTS succeeded"
-            )
-            return
-
-    except Exception as edge_error:
-
-        print(
-            "TTS: Edge TTS unavailable. "
-            f"Using Google TTS fallback. "
-            f"Error: {edge_error}"
-        )
-
-        # Cleanup partial Edge files
-
-        for file in output_file.parent.glob(
-            f"{output_file.stem}_edge_*"
-        ):
-            file.unlink(
-                missing_ok=True
-            )
-
-        output_file.unlink(
-            missing_ok=True
-        )
-
-    # =====================================================
-    # 2. GOOGLE TTS FALLBACK
-    # =====================================================
-
-    try:
-
-        from gtts import gTTS
-
-        print(
-            f"TTS: using Google TTS fallback "
-            f"({len(chunks)} chunk(s))"
-        )
-
-        chunk_files = []
-
-        for index, chunk in enumerate(chunks):
-
-            chunk_file = (
-                output_file.parent
-                / f"{output_file.stem}_google_{index}.mp3"
-            )
-
-            last_error = None
-
-            for attempt in range(retries):
-
-                try:
-
-                    tts = gTTS(
-                        text=chunk,
-                        lang="km",
-                        slow=False,
-                    )
-
-                    await asyncio.to_thread(
-                        tts.save,
-                        str(chunk_file),
-                    )
-
-                    if (
-                        chunk_file.exists()
-                        and chunk_file.stat().st_size > 0
-                    ):
-                        break
-
-                except Exception as exc:
-
-                    last_error = exc
-
-                    print(
-                        f"Google TTS attempt "
-                        f"{attempt + 1}/{retries} "
-                        f"failed: {exc}"
-                    )
-
-                    if attempt < retries - 1:
-                        await asyncio.sleep(
-                            2 ** attempt
-                        )
-
-            if not (
-                chunk_file.exists()
-                and chunk_file.stat().st_size > 0
-            ):
-                raise RuntimeError(
-                    f"Google TTS failed: "
-                    f"{last_error}"
-                )
-
-            chunk_files.append(
-                chunk_file
-            )
-
-        # ---------------------------------------------
-        # Merge Google chunks
-        # ---------------------------------------------
-
-        if len(chunk_files) == 1:
-
-            shutil.copyfile(
-                chunk_files[0],
-                output_file,
-            )
-
-        else:
-
-            concat_file = (
-                output_file.parent
-                / f"{output_file.stem}_google_concat.txt"
-            )
-
-            with concat_file.open(
-                "w",
-                encoding="utf-8",
-            ) as f:
-
-                for file in chunk_files:
-
-                    f.write(
-                        "file '"
-                        + str(file).replace(
-                            "'",
-                            "'\\''",
-                        )
-                        + "'\n"
-                    )
-
-            run_command(
-                [
-                    "ffmpeg",
-                    "-y",
-                    "-f",
-                    "concat",
-                    "-safe",
-                    "0",
-                    "-i",
-                    str(concat_file),
-                    "-c:a",
-                    "libmp3lame",
-                    "-b:a",
-                    "128k",
-                    str(output_file),
-                ],
-                timeout=300,
-            )
-
-            concat_file.unlink(
-                missing_ok=True
-            )
-
-        # Cleanup
-
-        for file in chunk_files:
-            file.unlink(
-                missing_ok=True
-            )
-
-        if (
-            output_file.exists()
-            and output_file.stat().st_size > 0
-        ):
-            print(
-                "TTS: Google TTS fallback succeeded"
-            )
-            return
-
-        raise RuntimeError(
-            "Google TTS produced empty audio"
-        )
-
-    except Exception as google_error:
-
-        output_file.unlink(
-            missing_ok=True
-        )
-
-        raise RuntimeError(
-            "All TTS providers failed. "
-            f"Google TTS error: {google_error}"
-        ) from google_error
-
-
-# =========================================================
-# HOME
+# BASIC
 # =========================================================
 
 @app.get("/")
-def home():
-
+async def root():
     return {
-        "status": "ok",
-        "message": (
-            "Chinese-Khmer Dubbing API "
-            "is running"
-        ),
-        "version": APP_VERSION,
+        "status": "success",
+        "message": "Chinese-Khmer Dubbing API",
+        "version": "3.0.0"
     }
 
-
-# =========================================================
-# HEALTH
-# =========================================================
 
 @app.get("/health")
-def health():
-
+async def health():
     return {
-        "status": "healthy",
-        "version": APP_VERSION,
+        "status": "ok"
     }
 
-def cleanup_old_files(max_age_seconds=3600):
-    now = time.time()
 
-    for folder in [UPLOAD_DIR, AUDIO_DIR, OUTPUT_DIR]:
-        if not os.path.exists(folder):
-            continue
-
-        for name in os.listdir(folder):
-            path = os.path.join(folder, name)
-
-            try:
-                if os.path.isfile(path):
-                    age = now - os.path.getmtime(path)
-
-                    if age > max_age_seconds:
-                        os.remove(path)
-
-            except Exception as e:
-                print(f"Cleanup warning: {path} -> {e}")
 # =========================================================
-# UPLOAD
+# UPLOAD VIDEO
 # =========================================================
 
 @app.post("/upload")
-async def upload_video(
-    file: UploadFile = File(...)
-):
+async def upload_video(file: UploadFile = File(...)):
+
+    if not file.filename:
+        raise HTTPException(
+            status_code=400,
+            detail="No filename"
+        )
+
+    extension = Path(file.filename).suffix.lower()
+
+    if extension not in ALLOWED_VIDEO_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported video format: {extension}"
+        )
+
+    # Prevent unsafe filenames
+    safe_name = Path(file.filename).name
+
+    # Keep original filename but avoid path traversal
+    destination = UPLOAD_DIR / safe_name
+
     try:
-        if not file.filename:
-            raise HTTPException(
-                status_code=400,
-                detail="No file selected"
-            )
+        with destination.open("wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
 
-        original_name = Path(file.filename).name
-        extension = Path(original_name).suffix.lower()
-
-        if extension not in ALLOWED_VIDEO_EXTENSIONS:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unsupported video format: {extension}"
-            )
-
-        stem = Path(original_name).stem or "video"
-
-        filename = f"{stem}_{uuid.uuid4().hex[:8]}{extension}"
-        output_file = UPLOAD_DIR / filename
-
-        print(f"UPLOAD START: {original_name}")
-        print(f"UPLOAD PATH: {output_file}")
-
-        total_bytes = 0
-
-        with open(output_file, "wb") as buffer:
-            while True:
-                chunk = await file.read(1024 * 1024)
-
-                if not chunk:
-                    break
-
-                total_bytes += len(chunk)
-                if total_bytes > MAX_UPLOAD_BYTES:
-                    raise HTTPException(
-                        status_code=413,
-                        detail=f"Video is too large. Maximum size is {MAX_UPLOAD_BYTES // (1024 * 1024)} MB",
-                    )
-                buffer.write(chunk)
-
-        await file.close()
-
-        print(f"UPLOAD DONE: {total_bytes} bytes")
-
-        if total_bytes == 0:
-            if output_file.exists():
-                output_file.unlink()
-
-            raise HTTPException(
-                status_code=400,
-                detail="Uploaded file is empty"
-            )
-
-        return {
-            "status": "uploaded",
-            "filename": filename,
-            "size": total_bytes,
-            "message": "Video uploaded successfully"
-        }
-
-    except HTTPException:
-        raise
-
-    except Exception as exc:
-        print(f"UPLOAD ERROR: {type(exc).__name__}: {exc}")
-
+    except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Upload failed: {type(exc).__name__}: {exc}"
-        ) from exc
+            detail=f"Upload failed: {str(e)}"
+        )
+
+    return {
+        "status": "success",
+        "filename": safe_name,
+        "message": "Video uploaded successfully"
+    }
+
 
 # =========================================================
 # TRANSCRIBE
 # =========================================================
 
 @app.post("/transcribe")
-async def transcribe_video(filename: str):
-    try:
-        video_path = UPLOAD_DIR / Path(filename).name
+async def transcribe_video(
+    file: Optional[UploadFile] = File(None),
+    filename: Optional[str] = None
+):
 
-        print(f"TRANSCRIBE FILE: {video_path}")
+    # -----------------------------------------------------
+    # If file is uploaded directly
+    # -----------------------------------------------------
 
-        if not video_path.exists():
-            files = [
-                f.name for f in UPLOAD_DIR.iterdir()
-                if f.is_file()
-            ]
+    if file is not None:
 
+        if not file.filename:
             raise HTTPException(
-                status_code=404,
-                detail={
-                    "message": f"Video not found: {filename}",
-                    "available_files": files
-                }
+                status_code=400,
+                detail="No filename"
             )
 
-        model = await get_whisper_model()
+        safe_name = Path(file.filename).name
 
-        segments, info = model.transcribe(
+        extension = Path(safe_name).suffix.lower()
+
+        if extension not in ALLOWED_VIDEO_EXTENSIONS:
+            raise HTTPException(
+                status_code=400,
+                detail="Unsupported video format"
+            )
+
+        video_path = UPLOAD_DIR / safe_name
+
+        try:
+            with video_path.open("wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Upload failed: {str(e)}"
+            )
+
+    # -----------------------------------------------------
+    # If filename already uploaded
+    # -----------------------------------------------------
+
+    else:
+
+        if not filename:
+            raise HTTPException(
+                status_code=400,
+                detail="Filename is required"
+            )
+
+        safe_name = Path(filename).name
+        video_path = UPLOAD_DIR / safe_name
+
+        if not video_path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail="Video file not found"
+            )
+
+    # -----------------------------------------------------
+    # Transcription
+    # -----------------------------------------------------
+
+    try:
+
+        segments, info = whisper_model.transcribe(
             str(video_path),
             language="zh",
             beam_size=1,
-            vad_filter=True,
-            condition_on_previous_text=False
+            vad_filter=True
         )
 
-        results = []
+        result_segments = []
 
         for segment in segments:
+
             text = segment.text.strip()
 
-            if text:
-                results.append({
-                    "start": float(segment.start),
-                    "end": float(segment.end),
-                    "text": text
-                })
+            if not text:
+                continue
+
+            result_segments.append({
+                "start": round(float(segment.start), 2),
+                "end": round(float(segment.end), 2),
+                "text": text
+            })
 
         return {
             "status": "success",
-            "filename": filename,
-            "language": "zh",
-            "segments": results
+            "filename": safe_name,
+            "language": info.language,
+            "segments": result_segments
         }
 
-    except HTTPException:
-        raise
-
-    except Exception as exc:
-        print(f"TRANSCRIBE ERROR: {type(exc).__name__}: {exc}")
+    except Exception as e:
 
         raise HTTPException(
             status_code=500,
-            detail=f"Transcription failed: {type(exc).__name__}: {exc}"
+            detail=f"Transcription failed: {str(e)}"
         )
 
+
 # =========================================================
-# TRANSLATE
+# TRANSLATE ONE TEXT
 # =========================================================
 
-class TranslateRequest(BaseModel):
-    text: str | None = None
-    source: str = "zh"
-    target: str = "km"
-    segments: list[TranslateSegment] | None = None
+def translate_to_khmer(text: str) -> str:
 
+    text = text.strip()
 
-@app.post("/translate")
-async def translate(data: TranslateRequest):
+    if not text:
+        return ""
+
     try:
-        if data.segments:
-            translator = GoogleTranslator(
-                source=data.source,
-                target=data.target,
-            )
-            output = []
-            for segment in data.segments:
-                text = segment.text.strip()
-                if not text:
-                    continue
-                translated = await asyncio.to_thread(
-                    translator.translate,
-                    text,
-                )
-                output.append({
-                    "start": float(segment.start),
-                    "end": float(segment.end),
-                    "text": text,
-                    "translation": translated or text,
-                })
-            return {
-                "status": "success",
-                "source": data.source,
-                "target": data.target,
-                "segments": output,
-            }
-
-        text = (data.text or "").strip()
-        if not text:
-            raise HTTPException(
-                status_code=422,
-                detail="text or segments is required",
-            )
 
         translator = GoogleTranslator(
-            source=data.source,
-            target=data.target,
+            source="zh-CN",
+            target="km"
         )
-        result = await asyncio.to_thread(
-            translator.translate,
-            text,
+
+        result = translator.translate(text)
+
+        return result.strip() if result else ""
+
+    except Exception:
+
+        # Retry using auto source
+        try:
+
+            translator = GoogleTranslator(
+                source="auto",
+                target="km"
+            )
+
+            result = translator.translate(text)
+
+            return result.strip() if result else ""
+
+        except Exception as e:
+
+            raise RuntimeError(
+                f"Translation failed: {str(e)}"
+            )
+
+
+# =========================================================
+# TRANSLATE ENDPOINT
+# =========================================================
+
+@app.post("/translate")
+async def translate_text(data: TranslateRequest):
+
+    if not data.text.strip():
+
+        raise HTTPException(
+            status_code=400,
+            detail="Text cannot be empty"
+        )
+
+    try:
+
+        translated = await asyncio.to_thread(
+            translate_to_khmer,
+            data.text
         )
 
         return {
-            "status": "success",
-            "original": text,
-            "translation": result or text,
-            "source": data.source,
-            "target": data.target,
+            "success": True,
+            "original": data.text,
+            "translation": translated,
+            "source": "auto",
+            "target": "km"
         }
 
-    except HTTPException:
-        raise
-    except Exception as exc:
-        print(f"TRANSLATION ERROR: {type(exc).__name__}: {exc}")
+    except Exception as e:
+
         raise HTTPException(
             status_code=500,
-            detail=f"Translation failed: {type(exc).__name__}: {exc}",
-        ) from exc
+            detail=str(e)
+        )
+
+
+# =========================================================
+# TRANSLATE ALL SEGMENTS
+# =========================================================
+
+@app.post("/translate-segments")
+async def translate_segments(
+    data: List[Segment]
+):
+
+    if not data:
+
+        raise HTTPException(
+            status_code=400,
+            detail="No segments"
+        )
+
+    translated_segments = []
+
+    for segment in data:
+
+        chinese_text = segment.text.strip()
+
+        if not chinese_text:
+            continue
+
+        try:
+
+            khmer_text = await asyncio.to_thread(
+                translate_to_khmer,
+                chinese_text
+            )
+
+        except Exception as e:
+
+            raise HTTPException(
+                status_code=500,
+                detail=f"Translation failed: {str(e)}"
+            )
+
+        translated_segments.append({
+            "start": segment.start,
+            "end": segment.end,
+            "text": chinese_text,
+            "translation": khmer_text
+        })
+
+    return {
+        "success": True,
+        "segments": translated_segments
+    }
+
+
+# =========================================================
+# VOICE
+# =========================================================
+
+def get_voice(voice: Optional[str]) -> str:
+
+    if not voice:
+        return DEFAULT_VOICE
+
+    voice = voice.strip()
+
+    # User can send full Microsoft voice name
+    if voice.startswith("km-KH-"):
+        return voice
+
+    key = voice.lower()
+
+    return VOICE_MAP.get(
+        key,
+        DEFAULT_VOICE
+    )
 
 
 # =========================================================
@@ -879,69 +445,102 @@ async def translate(data: TranslateRequest):
 # =========================================================
 
 @app.post("/tts")
-async def text_to_speech(
-    data: TTSRequest,
-):
-
-    cleanup_old_files()
+async def text_to_speech(data: TTSRequest):
 
     text = data.text.strip()
 
     if not text:
         raise HTTPException(
             status_code=400,
-            detail="Text cannot be empty",
+            detail="Text cannot be empty"
         )
 
-    voice = (
-        data.voice.strip()
-        if data.voice
-        else DEFAULT_VOICE
-    )
+    voice = get_voice(data.voice)
 
-    filename = (
-        f"{uuid.uuid4().hex}.mp3"
-    )
+    filename = f"{uuid.uuid4().hex}.mp3"
 
-    filepath = (
-        AUDIO_DIR / filename
-    )
+    filepath = AUDIO_DIR / filename
 
     try:
 
-        await generate_tts_with_retry(
-            text=text,
-            output_file=filepath,
-            voice=voice,
-            retries=3,
+        communicate = edge_tts.Communicate(
+            text,
+            voice
         )
 
-        return {
-            "success": True,
-            "filename": filename,
-            "voice": voice,
-            "audio_url": (
-                f"/audio/{filename}"
-            ),
-        }
-
-    except Exception as exc:
-
-        filepath.unlink(
-            missing_ok=True
+        await communicate.save(
+            str(filepath)
         )
 
-        print(
-            f"TTS ERROR: {exc}"
-        )
+    except Exception as e:
 
         raise HTTPException(
             status_code=500,
-            detail=(
-                "TTS generation failed: "
-                f"{str(exc)}"
-            ),
-        ) from exc
+            detail=f"TTS generation failed: {str(e)}"
+        )
+
+    return {
+        "success": True,
+        "filename": filename,
+        "voice": voice,
+        "audio_url": f"/audio/{filename}"
+    }
+
+
+# =========================================================
+# TTS AUDIO FILE
+# =========================================================
+
+@app.get("/audio/{filename}")
+async def get_audio(filename: str):
+
+    safe_name = Path(filename).name
+
+    filepath = AUDIO_DIR / safe_name
+
+    if not filepath.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Audio file not found"
+        )
+
+    return FileResponse(
+        filepath,
+        media_type="audio/mpeg"
+    )
+
+
+# =========================================================
+# GET VIDEO DURATION
+# =========================================================
+
+def get_video_duration(video_path: Path) -> float:
+
+    command = [
+        "ffprobe",
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
+        str(video_path)
+    ]
+
+    result = subprocess.run(
+        command,
+        capture_output=True,
+        text=True
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            result.stderr
+        )
+
+    return float(
+        result.stdout.strip()
+    )
 
 
 # =========================================================
@@ -950,284 +549,220 @@ async def text_to_speech(
 
 @app.post("/create-dubbing")
 async def create_dubbing(
-    data: DubbingRequest,
+    data: DubbingRequest
 ):
 
-    cleanup_old_files()
-
-    safe_filename = safe_name(
+    safe_filename = Path(
         data.filename
-    )
+    ).name
 
-    video_file = (
-        UPLOAD_DIR / safe_filename
-    )
+    video_file = UPLOAD_DIR / safe_filename
 
     if not video_file.exists():
+
         raise HTTPException(
             status_code=404,
-            detail="Video file not found",
+            detail="Video file not found"
         )
 
     if not data.segments:
+
         raise HTTPException(
             status_code=400,
-            detail="No dubbing segments",
+            detail="No dubbing segments"
         )
+
+    # -----------------------------------------------------
+    # Job directory
+    # -----------------------------------------------------
 
     job_id = uuid.uuid4().hex
 
-    work_dir = (
-        BASE_DIR
-        / f"dubbing_{job_id}"
+    work_dir = Path(
+        f"/tmp/dubbing_{job_id}"
     )
 
     work_dir.mkdir(
         parents=True,
-        exist_ok=True,
+        exist_ok=True
     )
 
     try:
 
-        # -----------------------------------------
-        # Get video duration
-        # -----------------------------------------
-
-        probe = run_command(
-            [
-                "ffprobe",
-                "-v",
-                "error",
-                "-show_entries",
-                "format=duration",
-                "-of",
-                "default=noprint_wrappers=1:nokey=1",
-                str(video_file),
-            ],
-            timeout=60,
+        duration = get_video_duration(
+            video_file
         )
 
-        duration = float(
-            probe.stdout.strip()
-        )
+        # -------------------------------------------------
+        # Generate Khmer TTS for every segment
+        # -------------------------------------------------
 
-        if duration <= 0:
-            raise RuntimeError(
-                "Invalid video duration"
-            )
+        audio_segments = []
 
-        # -----------------------------------------
-        # Generate TTS
-        # -----------------------------------------
-
-        audio_files = []
-
-        voice = (
-            data.voice.strip()
-            if data.voice
-            else DEFAULT_VOICE
-        )
+        voice = get_voice(data.voice)
 
         for index, segment in enumerate(
             data.segments
         ):
 
-            if not isinstance(
-                segment,
-                dict,
-            ):
-                continue
-
-            text = str(
-                segment.get(
-                    "translation",
-                    segment.get(
-                        "text",
-                        "",
-                    ),
-                )
+            khmer_text = (
+                segment.translation
+                or segment.text
             ).strip()
 
-            if not text:
+            if not khmer_text:
                 continue
 
-            try:
-                start = float(
-                    segment.get(
-                        "start",
-                        0,
-                    )
-                )
-            except Exception:
-                start = 0
-
-            try:
-                end = float(
-                    segment.get(
-                        "end",
-                        start + 1,
-                    )
-                )
-            except Exception:
-                end = start + 1
-
-            start = max(
-                0,
-                start,
+            audio_filename = (
+                f"{index:04d}.mp3"
             )
 
-            end = max(
-                start + 0.1,
-                end,
+            audio_path = (
+                work_dir /
+                audio_filename
             )
 
-            # Do not put audio outside video
-            if start >= duration:
-                continue
-
-            end = min(
-                end,
-                duration,
+            communicate = edge_tts.Communicate(
+                khmer_text,
+                voice
             )
 
-            tts_file = (
-                work_dir
-                / f"tts_{index}.mp3"
+            await communicate.save(
+                str(audio_path)
             )
 
-            await generate_tts_with_retry(
-                text=text,
-                output_file=tts_file,
-                voice=voice,
-                retries=3,
+            audio_segments.append({
+                "start": float(segment.start),
+                "end": float(segment.end),
+                "audio": audio_path
+            })
+
+        if not audio_segments:
+
+            raise HTTPException(
+                status_code=400,
+                detail="No valid Khmer audio segments"
             )
 
-            audio_files.append(
-                {
-                    "file": tts_file,
-                    "start": start,
-                    "end": end,
-                }
-            )
-
-        if not audio_files:
-            raise RuntimeError(
-                "No valid TTS segments"
-            )
-
-        # -----------------------------------------
-        # Base silent audio
-        # -----------------------------------------
+        # -------------------------------------------------
+        # Create silent base audio
+        # -------------------------------------------------
 
         base_audio = (
-            work_dir
-            / "base_audio.wav"
+            work_dir /
+            "base.wav"
         )
 
-        run_command(
+        subprocess.run(
             [
                 "ffmpeg",
                 "-y",
                 "-f",
                 "lavfi",
                 "-i",
-                "anullsrc=r=44100:cl=stereo",
+                "anullsrc=r=48000:cl=stereo",
                 "-t",
                 str(duration),
                 "-c:a",
                 "pcm_s16le",
-                str(base_audio),
+                str(base_audio)
             ],
-            timeout=300,
+            check=True,
+            capture_output=True
         )
 
-        # -----------------------------------------
-        # Build inputs
-        # -----------------------------------------
+        # -------------------------------------------------
+        # Build FFmpeg inputs
+        # -------------------------------------------------
 
         inputs = [
             "-i",
-            str(base_audio),
+            str(video_file),
+
+            "-i",
+            str(base_audio)
         ]
 
-        for item in audio_files:
+        filter_parts = []
 
-            inputs.extend(
-                [
-                    "-i",
-                    str(item["file"]),
-                ]
-            )
-
-        # -----------------------------------------
-        # Build filters
-        # -----------------------------------------
-
-        filters = [
-            "[0:a]anull[a0]"
-        ]
-
-        mix_inputs = [
-            "[a0]"
-        ]
-
-        for index, item in enumerate(
-            audio_files,
-            start=1,
-        ):
-
-            delay_ms = max(
-                0,
-                int(
-                    item["start"] * 1000
-                ),
-            )
-
-            filters.append(
-                f"[{index}:a]"
-                f"adelay={delay_ms}:all=1,"
-                f"aresample=44100,"
-                f"volume=1.0"
-                f"[a{index}]"
-            )
-
-            mix_inputs.append(
-                f"[a{index}]"
-            )
-
-        filter_complex = (
-            ";".join(filters)
-            + ";"
-            + "".join(mix_inputs)
-            + f"amix=inputs={len(mix_inputs)}:"
-              "duration=longest:"
-              "dropout_transition=0,"
-              "aresample=44100"
-              "[mixed]"
+        # Base silent audio
+        filter_parts.append(
+            "[1:a]volume=0.0[base]"
         )
 
-        # -----------------------------------------
-        # Output
-        # -----------------------------------------
+        mix_labels = ["[base]"]
 
-        output_filename = (
-            f"khmer_dubbed_{job_id}.mp4"
+        for index, item in enumerate(
+            audio_segments
+        ):
+
+            audio_path = item["audio"]
+
+            start = max(
+                0,
+                item["start"]
+            )
+
+            end = min(
+                duration,
+                item["end"]
+            )
+
+            inputs.extend([
+                "-i",
+                str(audio_path)
+            ])
+
+            input_number = index + 2
+
+            delay_ms = int(
+                start * 1000
+            )
+
+            segment_duration = max(
+                0.1,
+                end - start
+            )
+
+            label = f"a{index}"
+
+            filter_parts.append(
+                f"[{input_number}:a]"
+                f"adelay={delay_ms}|{delay_ms},"
+                f"apad=pad_dur={segment_duration},"
+                f"atrim=duration={duration}"
+                f"[{label}]"
+            )
+
+            mix_labels.append(
+                f"[{label}]"
+            )
+
+        # -------------------------------------------------
+        # Mix Khmer voices
+        # -------------------------------------------------
+
+        filter_parts.append(
+            "".join(mix_labels)
+            + f"amix=inputs={len(mix_labels)}:"
+              f"duration=longest:"
+              f"dropout_transition=0"
+              f"[dub]"
+        )
+
+        filter_complex = ";".join(
+            filter_parts
         )
 
         output_file = (
-            OUTPUT_DIR
-            / output_filename
+            OUTPUT_DIR /
+            f"dubbed_{job_id}.mp4"
         )
 
         command = [
             "ffmpeg",
             "-y",
-
-            "-i",
-            str(video_file),
-
             *inputs,
-
             "-filter_complex",
             filter_complex,
 
@@ -1235,7 +770,7 @@ async def create_dubbing(
             "0:v:0",
 
             "-map",
-            "[mixed]",
+            "[dub]",
 
             "-c:v",
             "libx264",
@@ -1244,7 +779,7 @@ async def create_dubbing(
             "veryfast",
 
             "-crf",
-            "23",
+            "28",
 
             "-c:a",
             "aac",
@@ -1252,144 +787,69 @@ async def create_dubbing(
             "-b:a",
             "128k",
 
-            "-t",
-            str(duration),
+            "-shortest",
 
-            "-movflags",
-            "+faststart",
-
-            str(output_file),
+            str(output_file)
         ]
 
-        run_command(
+        subprocess.run(
             command,
-            timeout=1200,
+            check=True,
+            capture_output=True
         )
-
-        if (
-            not output_file.exists()
-            or output_file.stat().st_size <= 0
-        ):
-            raise RuntimeError(
-                "FFmpeg did not create output video"
-            )
 
         return {
             "success": True,
-            "filename": output_filename,
+            "job_id": job_id,
+            "filename": output_file.name,
             "video_url": (
-                f"/video/{output_filename}"
+                f"/output/{output_file.name}"
             ),
-            "message": (
-                "Khmer dubbed video "
-                "created successfully"
-            ),
+            "voice": voice
         }
 
     except HTTPException:
         raise
 
-    except Exception as exc:
-
-        print(
-            f"DUBBING ERROR: {exc}"
-        )
+    except Exception as e:
 
         raise HTTPException(
             status_code=500,
-            detail=(
-                "Dubbing failed: "
-                f"{str(exc)}"
-            ),
-        ) from exc
+            detail=f"Dubbing failed: {str(e)}"
+        )
 
     finally:
 
-        # IMPORTANT:
-        # This now ALWAYS runs.
+        # -------------------------------------------------
+        # Clean temporary job directory
+        # -------------------------------------------------
+
         shutil.rmtree(
             work_dir,
-            ignore_errors=True,
+            ignore_errors=True
         )
 
 
 # =========================================================
-# AUDIO
+# OUTPUT VIDEO
 # =========================================================
 
-@app.get("/audio/{filename}")
-async def get_audio(
-    filename: str,
-):
+@app.get("/output/{filename}")
+async def get_output(filename: str):
 
-    safe_filename = safe_name(
-        filename
-    )
+    safe_name = Path(filename).name
 
-    filepath = (
-        AUDIO_DIR / safe_filename
-    )
+    filepath = OUTPUT_DIR / safe_name
 
     if not filepath.exists():
+
         raise HTTPException(
             status_code=404,
-            detail="Audio file not found",
+            detail="Output video not found"
         )
 
     return FileResponse(
-        path=str(filepath),
-        media_type="audio/mpeg",
-        filename=safe_filename,
-    )
-
-
-# =========================================================
-# VIDEO
-# =========================================================
-
-@app.get("/video/{filename}")
-async def get_video(
-    filename: str,
-):
-
-    safe_filename = safe_name(
-        filename
-    )
-
-    filepath = (
-        OUTPUT_DIR / safe_filename
-    )
-
-    if not filepath.exists():
-        raise HTTPException(
-            status_code=404,
-            detail="Video file not found",
-        )
-
-    return FileResponse(
-        path=str(filepath),
+        filepath,
         media_type="video/mp4",
-        filename=safe_filename,
-    )
-
-
-# =========================================================
-# SERVER
-# =========================================================
-
-if __name__ == "__main__":
-
-    import uvicorn
-
-    port = int(
-        os.environ.get(
-            "PORT",
-            "10000",
-        )
-    )
-
-    uvicorn.run(
-        app,
-        host="0.0.0.0",
-        port=port,
+        filename=safe_name
     )
